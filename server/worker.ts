@@ -29,6 +29,7 @@ interface Env {
 const schema = `CREATE TABLE IF NOT EXISTS journal_libraries(id TEXT PRIMARY KEY,name TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,nonce TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS journal_records(library_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT NOT NULL,PRIMARY KEY(library_id,key));
 CREATE TABLE IF NOT EXISTS journal_bindings(room_id TEXT NOT NULL,library_id TEXT NOT NULL,token_hash TEXT NOT NULL,epoch TEXT NOT NULL,PRIMARY KEY(room_id,library_id));
+CREATE TABLE IF NOT EXISTS journal_private_art(library_id TEXT NOT NULL,room_id TEXT NOT NULL,owner_id TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,data TEXT NOT NULL DEFAULT '[]',PRIMARY KEY(library_id,room_id,owner_id));
 CREATE TABLE IF NOT EXISTS journal_nonces(id TEXT PRIMARY KEY,expires INTEGER NOT NULL);`;
 const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), {
@@ -151,7 +152,7 @@ async function validateUpdate(update: Metadata) {
       if (key !== prefix + entry.id)
         throw new ApiError("资料类型或编号与存储位置不符");
       if (entry.kind === "art" && entry.visibility === "gm")
-        throw new ApiError("DM 私密插画应保存在 DM 本机");
+        throw new ApiError("DM 私密插画不能写入共享资料，请使用私密接口");
     } else if (key === DISPLAY_KEY) {
       const display = object(value);
       if (
@@ -242,6 +243,74 @@ export default {
           token,
           epoch,
         });
+      }
+      const privateArt = url.pathname.match(
+        /^\/api\/admin\/libraries\/([a-zA-Z0-9-]+)\/private-art$/,
+      );
+      if (privateArt) {
+        const id = privateArt[1];
+        await library(db, id);
+        const roomId = url.searchParams.get("room") ?? "",
+          ownerId = url.searchParams.get("owner") ?? "";
+        if (!roomId || roomId.length > 160 || !ownerId || ownerId.length > 160)
+          throw new ApiError("私密资料的房间或账号编号无效");
+        if (request.method === "GET") {
+          const row = await db
+            .prepare(
+              "SELECT revision,data FROM journal_private_art WHERE library_id=? AND room_id=? AND owner_id=?",
+            )
+            .bind(id, roomId, ownerId)
+            .first<{ revision: number; data: string }>();
+          return json({
+            revision: row?.revision ?? 0,
+            entries: row ? JSON.parse(row.data) : [],
+          });
+        }
+        if (request.method === "POST") {
+          if (
+            !Array.isArray(input.entries) ||
+            input.entries.length > 500 ||
+            !Number.isSafeInteger(input.revision) ||
+            input.revision < 0
+          )
+            throw new ApiError("私密插画更新无效，单个资料库最多 500 张");
+          const ids = new Set<string>();
+          const entries = input.entries.map((value: unknown) => {
+            const entry = validateEntry(value);
+            if (
+              entry.kind !== "art" ||
+              entry.visibility !== "gm" ||
+              ids.has(entry.id)
+            )
+              throw new ApiError("私密接口只接受不重复的 DM 隐藏插画");
+            ids.add(entry.id);
+            return entry;
+          });
+          const result = await db.batch([
+            db
+              .prepare(
+                "INSERT OR IGNORE INTO journal_private_art(library_id,room_id,owner_id) VALUES(?,?,?)",
+              )
+              .bind(id, roomId, ownerId),
+            db
+              .prepare(
+                "UPDATE journal_private_art SET revision=revision+1,data=? WHERE library_id=? AND room_id=? AND owner_id=? AND revision=?",
+              )
+              .bind(
+                JSON.stringify(entries),
+                id,
+                roomId,
+                ownerId,
+                input.revision,
+              ),
+          ]);
+          if (result[1].meta.changes !== 1)
+            throw new ApiError(
+              "私密插画已在其他窗口修改，请重新读取后重试",
+              409,
+            );
+          return json({ revision: input.revision + 1 });
+        }
       }
       const state = url.pathname.match(
         /^\/api\/(admin\/)?libraries\/([a-zA-Z0-9-]+)\/state$/,

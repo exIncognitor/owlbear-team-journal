@@ -66,6 +66,8 @@ export interface Money {
   rev: string;
 }
 export interface Snapshot {
+  privateArtStorage?: "browser" | "cloud";
+  privateArtMessage?: string;
   storage?: import("./storage-router").StorageInfo;
   role: "GM" | "PLAYER";
   entries: Entry[];

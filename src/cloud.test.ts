@@ -10,6 +10,7 @@ import {
 } from "./cloud-protocol";
 import { StorageRouter } from "./storage-router";
 import { TeamStore, type Driver } from "./store";
+import { BrowserArtVault, CloudArtVault } from "./private-art";
 import {
   RECORD_PREFIX,
   WELCOME_ACHIEVEMENT,
@@ -20,7 +21,23 @@ import {
 } from "./model";
 let mf: Miniflare, endpoint: string, profile: CloudProfile;
 const stops: (() => void)[] = [];
+function memoryStorage() {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+    clear: () => values.clear(),
+    removeItem: (key: string) => {
+      values.delete(key);
+    },
+  } as Storage;
+}
+const browserStorage = memoryStorage();
 beforeAll(async () => {
+  vi.stubGlobal("localStorage", browserStorage);
+  vi.stubGlobal("window", { addEventListener() {}, removeEventListener() {} });
   const keys = await crypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
     true,
@@ -64,6 +81,7 @@ beforeAll(async () => {
 afterAll(async () => {
   stops.forEach((stop) => stop());
   await mf?.dispose();
+  vi.unstubAllGlobals();
 });
 function room(id: string, initial: Metadata = {}) {
   let data = initial;
@@ -309,3 +327,233 @@ it("allows cloud datasets above 16 kB and rejects copying them into an undersize
   expect(JSON.stringify(a.data())).toBe(before);
   expect(a.store.state.entries).toHaveLength(5);
 }, 15000);
+
+const hiddenArt: Draft = {
+  kind: "art",
+  title: "云端秘密",
+  url: "https://images.example.org/cloud-secret.png",
+  caption: "未公开说明",
+  visibility: "gm",
+};
+async function privateCloud(id: string) {
+  const source = room(id),
+    router = new StorageRouter(source.driver, browserStorage);
+  const store = new TeamStore(router);
+  await connect(store);
+  await router.saveProfile(profile);
+  const lib = await router.createLibrary(profile, id);
+  return { ...source, router, store, lib };
+}
+it("stores private artwork in D1, isolates room/library/owner, and restores it after clearing browser storage and reimporting management", async () => {
+  const a = await privateCloud("cloud-private-restore");
+  await a.store.save({ ...hiddenArt, title: "房间本机图" });
+  await a.store.selectStorage(profile, a.lib);
+  await a.store.save(hiddenArt);
+  expect(a.store.state.privateArtStorage).toBe("cloud");
+  const art = a.store.state.entries[0] as Artwork;
+  expect(JSON.stringify(a.data())).not.toContain("cloud-secret");
+  const path = `/admin/libraries/${a.lib.id}/private-art?room=cloud-private-restore&owner=dm`;
+  const raw = await cloudRequest(endpoint, path, "GET", undefined, profile);
+  expect(raw.entries[0].id).toBe(art.id);
+  for (const suffix of [
+    "room=other&owner=dm",
+    "room=cloud-private-restore&owner=other",
+  ]) {
+    expect(
+      (
+        await cloudRequest(
+          endpoint,
+          path.split("?")[0] + "?" + suffix,
+          "GET",
+          undefined,
+          profile,
+        )
+      ).entries,
+    ).toEqual([]);
+  }
+  const libB = await a.router.createLibrary(profile, "独立私密库");
+  await a.store.selectStorage(profile, libB);
+  expect(a.store.state.entries).toHaveLength(0);
+  await a.store.selectStorage();
+  expect(a.store.state.entries[0].title).toBe("房间本机图");
+  await a.store.selectStorage(profile, a.lib);
+  expect(a.store.state.entries[0].title).toBe("云端秘密");
+  browserStorage.clear();
+  const router = new StorageRouter(a.driver, browserStorage),
+    restored = new TeamStore(router);
+  await connect(restored);
+  expect(restored.state.entries).toHaveLength(0);
+  expect(restored.state.privateArtMessage).toContain("尚未导入");
+  await expect(restored.save(hiddenArt)).rejects.toThrow("管理配置");
+  await router.saveProfile(profile);
+  await restored.refresh();
+  expect(restored.state.entries[0]).toEqual(art);
+  expect(restored.state.privateArtMessage).toBe("");
+});
+it("never exposes private art through member reads or shared writes, and rejects unsigned or member-token private requests", async () => {
+  const a = await privateCloud("cloud-private-permission");
+  await a.store.selectStorage(profile, a.lib);
+  await a.store.save(hiddenArt);
+  const selection = a.router.selection;
+  if (selection.mode !== "cloud") throw Error("expected cloud");
+  const path = `/admin/libraries/${a.lib.id}/private-art?room=cloud-private-permission&owner=dm`;
+  expect((await fetch(endpoint + path)).status).toBe(403);
+  expect(
+    (
+      await fetch(endpoint + path, {
+        headers: { Authorization: `Bearer ${selection.token}`, "X-Role": "GM" },
+      })
+    ).status,
+  ).toBe(403);
+  const publicData = await cloudRequest(
+    endpoint,
+    `/libraries/${a.lib.id}/state?room=cloud-private-permission`,
+    "GET",
+    undefined,
+    selection.token,
+  );
+  expect(JSON.stringify(publicData)).not.toContain("cloud-secret");
+  expect(JSON.stringify(publicData)).not.toContain("未公开说明");
+  const privateEntry = a.store.state.entries[0];
+  await expect(
+    cloudRequest(
+      endpoint,
+      `/admin/libraries/${a.lib.id}/state`,
+      "POST",
+      {
+        revision: publicData.revision,
+        update: { [RECORD_PREFIX + privateEntry.id]: privateEntry },
+      },
+      profile,
+    ),
+  ).rejects.toThrow("不能写入共享资料");
+});
+it("uses the revision of the exact private read and rejects stale writes even after another read on the same vault", async () => {
+  const a = await privateCloud("cloud-private-conflicts");
+  await a.store.selectStorage(profile, a.lib);
+  if (a.router.selection.mode !== "cloud") throw Error("expected cloud");
+  const vault = new CloudArtVault(
+    a.router.selection,
+    "cloud-private-conflicts",
+    "dm",
+    async () => profile,
+  );
+  const old = await vault.read();
+  const entry = {
+    ...hiddenArt,
+    id: "private-one",
+    rev: "r1",
+    updatedAt: 1,
+  } as Artwork;
+  await vault.write([entry], old);
+  await vault.read();
+  await expect(vault.write([], old)).rejects.toThrow("其他窗口修改");
+  expect((await vault.read())[0]).toEqual(entry);
+});
+it("migrates old cloud-scoped local artwork once without deleting the recovery copy or resurrecting cloud deletions", async () => {
+  const a = await privateCloud("cloud-private-migrate");
+  const local = new BrowserArtVault(
+    `cloud-private-migrate|${endpoint}|${a.lib.id}`,
+    "dm",
+  );
+  const entry = {
+    ...hiddenArt,
+    id: "legacy-art",
+    rev: "old",
+    updatedAt: 1,
+  } as Artwork;
+  local.write([entry]);
+  await a.store.selectStorage(profile, a.lib);
+  expect(a.store.state.entries[0]).toEqual(entry);
+  expect(local.read()).toEqual([entry]);
+  expect(local.migrated()).toBe(true);
+  await a.store.remove(entry);
+  await a.store.refresh();
+  expect(a.store.state.entries).toHaveLength(0);
+  expect(local.read()).toEqual([entry]);
+});
+it("rejects an old private editor if the room switches libraries while its private read is pending", async () => {
+  const a = await privateCloud("cloud-private-delayed");
+  await a.store.selectStorage(profile, a.lib);
+  await a.store.save(hiddenArt);
+  const original = a.store.state.entries[0] as Artwork;
+  const other = await a.router.createLibrary(profile, "延迟期间的新来源");
+  let entered!: () => void, release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const fetcher = globalThis.fetch;
+  let held = false;
+  const spy = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (input, init) => {
+      if (
+        !held &&
+        String(input).includes(`/libraries/${a.lib.id}/private-art?`) &&
+        init?.method === "GET"
+      ) {
+        held = true;
+        entered();
+        await gate;
+      }
+      return fetcher(input, init);
+    });
+  const pending = a.store.save(
+    { ...original, title: "不应保存的旧编辑" },
+    original,
+  );
+  const assertion = expect(pending).rejects.toThrow("资料库已切换");
+  try {
+    await waiting;
+    await a.router.select(profile, other);
+    release();
+    await assertion;
+  } finally {
+    release();
+    spy.mockRestore();
+  }
+  await a.store.selectStorage(profile, a.lib);
+  expect(a.store.state.entries[0].title).toBe(original.title);
+});
+it("preserves public records on failed private saves, then publishes/hides/removes with private data excluded from member state", async () => {
+  const a = await privateCloud("cloud-private-visibility");
+  await a.store.selectStorage(profile, a.lib);
+  await a.store.save({ ...hiddenArt, visibility: "players" });
+  const publicArt = a.store.state.entries[0] as Artwork;
+  const fetcher = globalThis.fetch;
+  const spy = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (input, init) => {
+      if (String(input).includes("/private-art?") && init?.method === "POST")
+        throw Error("private offline");
+      return fetcher(input, init);
+    });
+  try {
+    await expect(
+      a.store.save({ ...publicArt, visibility: "gm" }, publicArt),
+    ).rejects.toThrow("private offline");
+  } finally {
+    spy.mockRestore();
+  }
+  expect((a.store.state.entries[0] as Artwork).visibility).toBe("players");
+  await a.store.save({ ...publicArt, visibility: "gm" }, publicArt);
+  let hidden = a.store.state.entries[0] as Artwork;
+  await a.store.save({ ...hidden, visibility: "players" }, hidden);
+  expect((a.store.state.entries[0] as Artwork).visibility).toBe("players");
+  const path = `/admin/libraries/${a.lib.id}/private-art?room=cloud-private-visibility&owner=dm`;
+  expect(
+    (await cloudRequest(endpoint, path, "GET", undefined, profile)).entries,
+  ).toEqual([]);
+  await a.store.save(
+    { ...a.store.state.entries[0], visibility: "gm" } as Artwork,
+    a.store.state.entries[0],
+  );
+  hidden = a.store.state.entries[0] as Artwork;
+  await a.store.remove(hidden);
+  expect(
+    (await cloudRequest(endpoint, path, "GET", undefined, profile)).entries,
+  ).toEqual([]);
+});

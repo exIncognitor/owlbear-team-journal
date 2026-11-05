@@ -250,6 +250,18 @@ export class StorageRouter implements Driver {
         )
       : undefined;
   }
+  async privateArtProfile(selection: CloudSelection, owner: Identity) {
+    const identity = await this.identity();
+    if (
+      identity.role !== "GM" ||
+      identity.playerId !== owner.playerId ||
+      identity.roomId !== owner.roomId
+    )
+      throw Error("当前 DM 身份已变化，请重新读取私密插画");
+    return (await this.profiles()).find(
+      (profile) => profile.endpoint === selection.endpoint,
+    );
+  }
   async write(update: Metadata, expected?: Metadata) {
     await this.refreshRoom();
     const stamp = expected?.[STAMP_KEY] as

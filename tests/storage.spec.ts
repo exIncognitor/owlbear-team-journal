@@ -49,6 +49,21 @@ test("DM storage settings switch one room across two libraries and restore room 
   page,
 }) => {
   await page.setViewportSize({ width: 1580, height: 940 });
+  const privateRequests: string[] = [];
+  await page.route(
+    "https://images.example.org/*-private.svg",
+    async (route) => {
+      privateRequests.push(
+        (await (
+          await route.request().frame().frameElement()
+        ).getAttribute("id")) ?? "",
+      );
+      await route.fulfill({
+        contentType: "image/svg+xml",
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect width="200" height="120" fill="#463c59"/></svg>',
+      });
+    },
+  );
   const origin = "http://127.0.0.1:5183";
   const src = (room: string) =>
     "/panel.html?obrref=" +
@@ -87,9 +102,21 @@ test("DM storage settings switch one room across two libraries and restore room 
   const dm = page.frameLocator("#dm"),
     player = page.frameLocator("#player"),
     other = page.frameLocator("#other");
+  async function addHidden(title: string, url: string) {
+    await dm.getByRole("button", { name: /^插画/ }).click();
+    await dm.getByRole("button", { name: "从链接导入", exact: true }).click();
+    await dm.getByLabel("标题", { exact: true }).fill(title);
+    await dm.getByLabel("图片地址", { exact: true }).fill(url);
+    await dm.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(
+      dm.getByRole("heading", { name: title, exact: true }),
+    ).toBeVisible();
+    await dm.getByRole("button", { name: /^团队仓库/ }).click();
+  }
   await expect(
     dm.getByRole("heading", { name: "短团药水", exact: true }),
   ).toBeVisible();
+  await addHidden("房间私密图", "https://images.example.org/room-private.svg");
   await expect(
     player.getByRole("button", { name: "存储设置", exact: true }),
   ).toHaveCount(0);
@@ -129,6 +156,10 @@ test("DM storage settings switch one room across two libraries and restore room 
   await expect(
     dm.getByRole("heading", { name: "云端 A 药水", exact: true }),
   ).toBeVisible();
+  await addHidden("云端私密图", "https://images.example.org/cloud-private.svg");
+  await player.getByRole("button", { name: /^插画/ }).click();
+  await expect(player.getByText("云端私密图", { exact: true })).toHaveCount(0);
+  await player.getByRole("button", { name: /^团队仓库/ }).click();
   await dm.getByRole("button", { name: "存储设置", exact: true }).click();
   await dm.getByLabel("存储来源").selectOption(connectionId);
   await dm.getByLabel("新资料库名称").fill("短模组 B");
@@ -152,7 +183,7 @@ test("DM storage settings switch one room across two libraries and restore room 
   ).toBeVisible();
   await dm.getByRole("button", { name: "存储设置", exact: true }).click();
   await dm.getByLabel("存储来源").selectOption("room");
-  await page.screenshot({ path: "qa/storage-settings-v0.3.0.png" });
+  await page.screenshot({ path: "qa/v0.3.1/storage-settings.png" });
   await dm
     .getByRole("button", { name: "切换并保留原资料", exact: true })
     .click();
@@ -162,4 +193,42 @@ test("DM storage settings switch one room across two libraries and restore room 
   const rooms = await page.locator("#rooms").textContent();
   expect(rooms).not.toContain((config.privateKey as JsonWebKey).d);
   expect(rooms).toContain("另一个房间的资料");
+  expect(rooms).not.toContain("cloud-private.svg");
+  expect(rooms).not.toContain("room-private.svg");
+  await dm.getByRole("button", { name: /^插画/ }).click();
+  await expect(
+    dm.getByRole("heading", { name: "房间私密图", exact: true }),
+  ).toBeVisible();
+  await expect(dm.getByText(/枭雄房间模式下/)).toBeVisible();
+  await dm.getByRole("button", { name: "存储设置", exact: true }).click();
+  await dm.getByLabel("存储来源").selectOption(connectionId);
+  await dm.getByLabel("模组资料库").selectOption(libA);
+  await dm
+    .getByRole("button", { name: "切换并保留原资料", exact: true })
+    .click();
+  await expect(
+    dm.getByRole("heading", { name: "云端私密图", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dm.getByText("仅 DM 可见 · 云端", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "qa/v0.3.1/cloud-private.png" });
+  await page.evaluate(() => localStorage.clear());
+  await page
+    .locator("#dm")
+    .evaluate((el: HTMLIFrameElement) => el.contentWindow!.location.reload());
+  await dm.getByRole("button", { name: /^插画/ }).click();
+  await expect(dm.getByText(/尚未导入 DM 管理配置/)).toBeVisible();
+  await dm.getByRole("button", { name: "存储设置", exact: true }).click();
+  await dm.getByLabel("云端连接配置文件", { exact: true }).setInputFiles({
+    name: "test-cloud.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(config)),
+  });
+  await expect(dm.getByRole("status")).toContainText("连接已验证");
+  await dm.getByRole("button", { name: "返回手记", exact: true }).click();
+  await expect(
+    dm.getByRole("heading", { name: "云端私密图", exact: true }),
+  ).toBeVisible();
+  expect(privateRequests).not.toContain("player");
 });

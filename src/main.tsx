@@ -320,7 +320,7 @@ function App() {
           title={
             state.ready && !state.error
               ? state.storage?.mode === "cloud"
-                ? `当前云端资料 ${state.bytes.toLocaleString()} B；房间共享数据 ${state.storage.roomBytes.toLocaleString()} / 16,000 B。DM 本机私密插画不计入。`
+                ? `当前云端共享资料 ${state.bytes.toLocaleString()} B；房间共享数据 ${state.storage.roomBytes.toLocaleString()} / 16,000 B。DM 云端私密插画单独保存，不计入此处。`
                 : `${state.bytes.toLocaleString()} B；按整个房间 metadata 的 JSON UTF-8 字节测算，包含其他插件。16 kB = 16,000 B。${store.demo ? "当前为本地演示数据。" : ""}`
               : "等待成功读取房间共享数据"
           }
@@ -543,8 +543,10 @@ function App() {
         </div>
         {tab === "art" && state.role === "GM" && (
           <p className="gallery-note">
-            仅 DM
-            可见的插画只保存在此账号、此房间的当前浏览器中；清除浏览器数据会丢失记录。改为玩家可见后才会同步给全队。
+            {state.privateArtMessage ||
+              (state.privateArtStorage === "cloud"
+                ? "仅 DM 可见的插画已使用云端私密存储，按模组、房间和 DM 账号隔离；清除网站数据不会删除云端记录，但需重新导入管理配置才能读取。改为玩家可见后才会同步给全队。"
+                : "枭雄房间模式下，仅 DM 可见的插画只保存在此账号、此房间的当前浏览器中；清除网站数据会丢失记录。改为玩家可见后才会同步给全队。")}
           </p>
         )}
         <div className="filters">
@@ -715,7 +717,7 @@ function App() {
                     className={`visibility-label ${entry.visibility === "gm" ? "private" : ""}`}
                   >
                     {entry.visibility === "gm"
-                      ? "仅 DM 可见 · 本机"
+                      ? `仅 DM 可见 · ${state.privateArtStorage === "cloud" ? "云端" : "本机"}`
                       : "玩家可见"}
                   </span>
                   <h3>{entry.title}</h3>
@@ -1093,8 +1095,8 @@ function EntryEditor({
                   value={draft.visibility ?? "players"}
                   onChange={(e) => update("visibility", e.target.value)}
                 >
-                  <option value="gm">仅 DM 可见（当前浏览器）</option>
-                  <option value="players">玩家可见（房间共享）</option>
+                  <option value="gm">仅 DM 可见</option>
+                  <option value="players">玩家可见</option>
                 </select>
               </label>
             )}

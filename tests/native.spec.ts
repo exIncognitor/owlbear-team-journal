@@ -116,7 +116,7 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
       frame.getByRole("region", { name: "当前展示" }).locator("img"),
     ).toHaveJSProperty("complete", true);
   }
-  await page.screenshot({ path: "qa/native-two-clients.png" });
+  await page.screenshot({ path: "qa/v0.3.1/native-two-clients.png" });
   const metadata = JSON.parse(
     (await page.locator("#metadata").textContent()) || "{}",
   );
@@ -206,7 +206,7 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
   expect((await page.locator("#metadata").textContent()) || "{}").not.toContain(
     "private.png",
   );
-  await page.screenshot({ path: "qa/private-gallery.png" });
+  await page.screenshot({ path: "qa/v0.3.1/private-gallery.png" });
   for (const frame of [player, dm])
     await frame.getByRole("button", { name: /^成就/ }).click();
   await expect(

@@ -1,5 +1,9 @@
 import OBR from "@owlbear-rodeo/sdk";
-import { BrowserArtVault, type PrivateArtVault } from "./private-art";
+import {
+  BrowserArtVault,
+  CloudArtVault,
+  type PrivateArtVault,
+} from "./private-art";
 import { StorageRouter, ROUTE_PENDING, ROUTE_ERROR } from "./storage-router";
 import { STAMP_KEY, type CloudProfile, type Library } from "./cloud-protocol";
 import {
@@ -56,8 +60,7 @@ export class TeamStore {
   constructor(
     private driver: Driver,
     readonly demo = false,
-    private makeVault: (identity: Identity) => PrivateArtVault = (identity) =>
-      new BrowserArtVault(identity.roomId, identity.playerId, demo),
+    private makeVault?: (identity: Identity) => PrivateArtVault,
   ) {}
   subscribe(fn: (snapshot: Snapshot) => void) {
     this.listeners.add(fn);
@@ -83,15 +86,33 @@ export class TeamStore {
     this.offVault?.();
     this.identity = identity;
     this.vaultScope = this.storage?.scope ?? "room";
-    this.vault =
-      identity.role === "GM"
-        ? this.makeVault({
-            ...identity,
-            roomId:
-              identity.roomId +
-              (this.vaultScope === "room" ? "" : `|${this.vaultScope}`),
-          })
-        : undefined;
+    this.vault = undefined;
+    if (identity.role === "GM") {
+      const scoped = {
+        ...identity,
+        roomId:
+          identity.roomId +
+          (this.vaultScope === "room" ? "" : `|${this.vaultScope}`),
+      };
+      const local = new BrowserArtVault(
+        scoped.roomId,
+        scoped.playerId,
+        this.demo,
+      );
+      const router = this.storage,
+        selection = router?.selection;
+      this.vault = this.makeVault
+        ? this.makeVault(scoped)
+        : selection?.mode === "cloud"
+          ? new CloudArtVault(
+              selection,
+              identity.roomId,
+              identity.playerId,
+              () => router!.privateArtProfile(selection, identity),
+              local,
+            )
+          : local;
+    }
     this.offVault = this.vault?.listen(() => {
       void this.refresh();
     });
@@ -122,7 +143,12 @@ export class TeamStore {
     state.role = this.identity.role;
     // Public data wins if a previous hide attempt was not acknowledged.
     const ids = new Set(state.entries.map((e) => e.id));
-    const privateArt = this.vault?.read().filter((e) => !ids.has(e.id)) ?? [];
+    const vault = this.vault;
+    const privateArt = ((await vault?.read()) ?? []).filter(
+      (e) => !ids.has(e.id),
+    );
+    state.privateArtStorage = vault?.location ?? "browser";
+    state.privateArtMessage = vault?.message ?? "";
     state.entries = [
       ...state.entries.filter((e) => e.kind !== "art" || e.visibility !== "gm"),
       ...privateArt,
@@ -202,7 +228,7 @@ export class TeamStore {
       metadata: Metadata,
       current: Snapshot,
     ) => Promise<Metadata> | Metadata,
-    afterWrite?: () => void,
+    afterWrite?: () => void | Promise<void>,
   ) {
     const route = this.storage?.routeVersion;
     const task = this.queue.then(async () => {
@@ -222,6 +248,15 @@ export class TeamStore {
       if (route !== this.storage?.routeVersion)
         throw Error("资料库已切换，请重新打开编辑器");
       const current = await this.snapshot(metadata);
+      if (route !== this.storage?.routeVersion)
+        throw Error("资料库已切换，请重新打开编辑器");
+      if (
+        identity &&
+        (identity.role !== this.identity.role ||
+          identity.playerId !== this.identity.playerId ||
+          identity.roomId !== this.identity.roomId)
+      )
+        throw Error("当前身份已变化，请重新打开编辑器");
       const update = await makeUpdate(metadata, current);
       try {
         if (Object.keys(update).length) {
@@ -229,7 +264,7 @@ export class TeamStore {
             checkCapacity({ ...metadata, ...update });
           await this.driver.write(update, metadata);
         }
-        afterWrite?.();
+        await afterWrite?.();
       } finally {
         await this.refresh();
       }
@@ -277,14 +312,22 @@ export class TeamStore {
           throw Error("只有 DM 可以编辑成就");
         verifyRevision(existing, previous?.rev);
         if (entry.kind === "art" && entry.visibility === "gm") {
-          if (current.role !== "GM" || !this.vault)
+          if (current.role !== "GM" || !operationVault)
             throw Error("只有 DM 可以设置插画可见性");
           // Save a private copy before removing a formerly public reference.
           // If the room write fails, the public record remains visibly public.
-          this.vault.write([
-            ...this.vault.read().filter((e) => e.id !== entry.id),
-            entry,
-          ]);
+          const privateEntries = await operationVault.read();
+          if (operationVault !== this.vault)
+            throw Error("资料库或身份已切换，请重新打开编辑器");
+          if (previous?.kind === "art" && previous.visibility === "gm")
+            verifyRevision(
+              privateEntries.find((e) => e.id === entry.id),
+              previous.rev,
+            );
+          await operationVault.write(
+            [...privateEntries.filter((e) => e.id !== entry.id), entry],
+            privateEntries,
+          );
           if (
             !previous ||
             (previous.kind === "art" && previous.visibility === "gm")
@@ -299,18 +342,16 @@ export class TeamStore {
           entry.id]: this.demo ? entry : await pack(entry),
         };
       },
-      () => {
+      async () => {
         if (entry.kind === "art" && entry.visibility !== "gm" && operationVault)
-          operationVault.write(
-            operationVault.read().filter((e) => e.id !== entry.id),
-          );
+          await this.clearPrivate(operationVault, entry.id, previous);
       },
     );
   }
   remove(previous: Entry) {
     let operationVault: PrivateArtVault | undefined;
     return this.mutate(
-      (_metadata, current) => {
+      async (_metadata, current) => {
         operationVault = this.vault;
         const existing = [...current.entries, ...current.achievements].find(
           (e) => e.id === previous.id,
@@ -321,9 +362,7 @@ export class TeamStore {
         if (previous.kind === "art" && previous.visibility === "gm") {
           if (current.role !== "GM" || !this.vault)
             throw Error("只有 DM 可以修改私密插画");
-          this.vault.write(
-            this.vault.read().filter((e) => e.id !== previous.id),
-          );
+          await this.clearPrivate(this.vault, previous.id, previous);
           return {};
         }
         const update: Metadata = {
@@ -334,12 +373,29 @@ export class TeamStore {
         if (current.shownId === previous.id) update[DISPLAY_KEY] = { id: null };
         return update;
       },
-      () => {
-        if (previous.kind === "art" && operationVault)
-          operationVault.write(
-            operationVault.read().filter((e) => e.id !== previous.id),
-          );
+      async () => {
+        if (
+          previous.kind === "art" &&
+          previous.visibility !== "gm" &&
+          operationVault
+        )
+          await this.clearPrivate(operationVault, previous.id);
       },
+    );
+  }
+  private async clearPrivate(
+    vault: PrivateArtVault,
+    id: string,
+    previous?: Entry,
+  ) {
+    const entries = await vault.read();
+    const entry = entries.find((e) => e.id === id);
+    if (!entry) return;
+    if (previous?.kind === "art" && previous.visibility === "gm")
+      verifyRevision(entry, previous.rev);
+    await vault.write(
+      entries.filter((e) => e.id !== id),
+      entries,
     );
   }
   money(values: Record<Coin, number>, base: Snapshot["money"]) {

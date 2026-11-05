@@ -124,6 +124,7 @@ export function StorageSettings({
                 const list = await router.libraries(saved);
                 setLibraries(list);
                 setLibraryId(list[0]?.id ?? "");
+                await store.refresh();
                 setMessage(
                   "连接已验证并保存，仅供此账号在当前浏览器使用。请保留原配置文件。",
                 );
@@ -185,8 +186,10 @@ export function StorageSettings({
           </>
         )}
         <p className="gallery-note">
-          切换只改变当前读取和保存的位置，原资料保留。复制只处理公开资料，且仅写入空目标；DM
-          本机私密插画按资料库隔离。枭雄共享模式继续受整个房间的 16 kB 限制。
+          切换只改变当前读取和保存的位置，原资料保留。复制只处理公开资料，且仅写入空目标。
+          隐藏插画在云端模式私密保存，在枭雄房间模式保存在 DM
+          当前浏览器；两种来源分别保留，切换不会搬迁私密资料。枭雄共享模式继续受整个房间的
+          16 kB 限制。
         </p>
         {message && (
           <p className="notice" role="status">
