@@ -60,6 +60,7 @@ test("standalone demo reports cloud storage after connecting and browser storage
   await expect(page.getByRole("status")).toContainText("连接已验证");
   await page.getByLabel("新资料库名称").fill("独立演示的测试资料库");
   await page.getByRole("button", { name: "新建资料库", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已创建空资料库");
   await expect(page.getByLabel("模组资料库")).not.toHaveValue("");
   await page
     .getByRole("button", { name: "切换并保留原资料", exact: true })
@@ -160,6 +161,7 @@ test("DM storage settings switch one room across two libraries and restore room 
   const connectionId = await dm.getByLabel("存储来源").inputValue();
   await dm.getByLabel("新资料库名称").fill("长期团 A");
   await dm.getByRole("button", { name: "新建资料库", exact: true }).click();
+  await expect(dm.getByRole("status")).toContainText("已创建空资料库");
   await expect(dm.getByLabel("模组资料库")).not.toHaveValue("");
   const libA = await dm.getByLabel("模组资料库").inputValue();
   await dm
@@ -194,6 +196,7 @@ test("DM storage settings switch one room across two libraries and restore room 
   await dm.getByLabel("存储来源").selectOption(connectionId);
   await dm.getByLabel("新资料库名称").fill("短模组 B");
   await dm.getByRole("button", { name: "新建资料库", exact: true }).click();
+  await expect(dm.getByRole("status")).toContainText("已创建空资料库");
   await expect(dm.getByLabel("模组资料库")).not.toHaveValue(libA);
   await dm
     .getByRole("button", { name: "切换并保留原资料", exact: true })
