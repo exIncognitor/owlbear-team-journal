@@ -184,6 +184,30 @@ button.primary:hover {
 .usage-warning {
   color: #e7b173;
 }
+.storage-open {
+  padding: 0 4px;
+  font-size: 16px;
+  height: 20px;
+}
+.storage-settings {
+  max-width: 100%;
+}
+.storage-current {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.storage-create {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+.storage-create button {
+  white-space: nowrap;
+}
+.storage-settings .form-actions {
+  flex-wrap: wrap;
+}
 .gallery-note {
   color: var(--muted);
   font-size: 11px;

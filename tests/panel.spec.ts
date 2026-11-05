@@ -214,10 +214,10 @@ test("compact journal header and book manifest keep the native action and only t
   ]);
   const manifest = await (await page.request.get("/manifest.json")).json();
   expect(manifest.name).toBe("团队手记");
-  expect(manifest.version).toBe("0.2.0");
+  expect(manifest.version).toBe("0.3.0");
   expect(manifest.action).toMatchObject({
     title: "团队手记",
-    icon: "/icon.svg?v=0.2.0",
+    icon: "/icon.svg?v=0.3.0",
     popover: "/panel.html",
     width: 760,
     height: 700,

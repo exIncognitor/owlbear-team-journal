@@ -66,6 +66,7 @@ export interface Money {
   rev: string;
 }
 export interface Snapshot {
+  storage?: import("./storage-router").StorageInfo;
   role: "GM" | "PLAYER";
   entries: Entry[];
   achievements: Achievement[];
@@ -262,6 +263,7 @@ export async function unpack(raw: unknown): Promise<unknown> {
 export async function readSnapshot(
   metadata: Metadata,
   demo = false,
+  includeWelcome = true,
 ): Promise<Snapshot> {
   const state = emptySnapshot();
   state.entries = (
@@ -294,7 +296,10 @@ export async function readSnapshot(
       }),
   );
   // Built-in welcome card needs no room write; an explicit tombstone removes it.
-  if (!Object.hasOwn(metadata, ACHIEVEMENT_PREFIX + WELCOME_ACHIEVEMENT.id))
+  if (
+    includeWelcome &&
+    !Object.hasOwn(metadata, ACHIEVEMENT_PREFIX + WELCOME_ACHIEVEMENT.id)
+  )
     state.achievements.push({ ...WELCOME_ACHIEVEMENT });
   state.achievements.sort(
     (a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id),

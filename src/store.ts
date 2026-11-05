@@ -1,5 +1,7 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { BrowserArtVault, type PrivateArtVault } from "./private-art";
+import { StorageRouter, ROUTE_PENDING, ROUTE_ERROR } from "./storage-router";
+import { STAMP_KEY, type CloudProfile, type Library } from "./cloud-protocol";
 import {
   COINS,
   ACHIEVEMENT_PREFIX,
@@ -30,7 +32,8 @@ export interface Identity {
 export interface Driver {
   ready(): Promise<void>;
   read(): Promise<Metadata>;
-  write(update: Metadata): Promise<void>;
+  write(update: Metadata, expected?: Metadata): Promise<void>;
+  managesCapacity?: boolean;
   listen(fn: (data: Metadata) => void): () => void;
   identity?(): Promise<Identity>;
   listenIdentity?(fn: (identity: Identity) => void): () => void;
@@ -43,6 +46,10 @@ export class TeamStore {
   private offVault?: () => void;
   private identity: Identity = { role: "PLAYER", roomId: "", playerId: "" };
   private vault?: PrivateArtVault;
+  private vaultScope = "";
+  get storage() {
+    return this.driver instanceof StorageRouter ? this.driver : undefined;
+  }
   private lifecycle = 0;
   private generation = 0;
   private queue: Promise<unknown> = Promise.resolve();
@@ -72,14 +79,23 @@ export class TeamStore {
   private emit() {
     for (const fn of this.listeners) fn(this.state);
   }
-  private configureIdentity(identity: Identity) {
+  private configureIdentity(identity: Identity, invalidate = true) {
     this.offVault?.();
     this.identity = identity;
-    this.vault = identity.role === "GM" ? this.makeVault(identity) : undefined;
+    this.vaultScope = this.storage?.scope ?? "room";
+    this.vault =
+      identity.role === "GM"
+        ? this.makeVault({
+            ...identity,
+            roomId:
+              identity.roomId +
+              (this.vaultScope === "room" ? "" : `|${this.vaultScope}`),
+          })
+        : undefined;
     this.offVault = this.vault?.listen(() => {
       void this.refresh();
     });
-    ++this.generation;
+    if (invalidate) ++this.generation;
     // Clear open private records immediately on role/account changes.
     this.state = {
       ...this.state,
@@ -88,10 +104,21 @@ export class TeamStore {
         (e) => e.kind !== "art" || e.visibility !== "gm",
       ),
     };
-    this.emit();
+    if (invalidate) this.emit();
   }
   private async snapshot(metadata: Metadata) {
-    const state = await readSnapshot(metadata, this.demo);
+    if (metadata[ROUTE_ERROR]) throw Error(String(metadata[ROUTE_ERROR]));
+    if (this.vaultScope !== (this.storage?.scope ?? "room"))
+      this.configureIdentity(this.identity, false);
+    const state = await readSnapshot(
+      metadata,
+      this.demo,
+      this.storage?.info().mode !== "cloud",
+    );
+    if (this.storage) {
+      state.storage = this.storage.info();
+      state.bytes = state.storage.bytes;
+    }
     state.role = this.identity.role;
     // Public data wins if a previous hide attempt was not acknowledged.
     const ids = new Set(state.entries.map((e) => e.id));
@@ -104,6 +131,15 @@ export class TeamStore {
   }
   private async receive(metadata: Metadata, lifecycle: number) {
     const generation = ++this.generation;
+    if (metadata[ROUTE_PENDING]) {
+      this.state = {
+        ...emptySnapshot(),
+        role: this.identity.role,
+        storage: this.storage?.info(),
+      };
+      this.emit();
+      return;
+    }
     try {
       const state = await this.snapshot(metadata);
       if (lifecycle === this.lifecycle && generation === this.generation) {
@@ -168,6 +204,7 @@ export class TeamStore {
     ) => Promise<Metadata> | Metadata,
     afterWrite?: () => void,
   ) {
+    const route = this.storage?.routeVersion;
     const task = this.queue.then(async () => {
       if (!this.state.ready) throw Error("资料尚未连接，请稍后重试");
       const identity = await this.driver.identity?.();
@@ -182,12 +219,15 @@ export class TeamStore {
         throw Error("当前身份已变化，请重新打开编辑器");
       }
       const metadata = await this.driver.read();
+      if (route !== this.storage?.routeVersion)
+        throw Error("资料库已切换，请重新打开编辑器");
       const current = await this.snapshot(metadata);
       const update = await makeUpdate(metadata, current);
       try {
         if (Object.keys(update).length) {
-          if (!this.demo) checkCapacity({ ...metadata, ...update });
-          await this.driver.write(update);
+          if (!this.demo && !this.driver.managesCapacity)
+            checkCapacity({ ...metadata, ...update });
+          await this.driver.write(update, metadata);
         }
         afterWrite?.();
       } finally {
@@ -197,7 +237,24 @@ export class TeamStore {
     this.queue = task.catch(() => {});
     return task;
   }
+  private storageTask(fn: () => Promise<void>) {
+    const task = this.queue.then(async () => {
+      if ((await this.driver.identity?.())?.role !== "GM")
+        throw Error("只有 DM 可以管理存储设置");
+      await fn();
+      await this.refresh();
+    });
+    this.queue = task.catch(() => {});
+    return task;
+  }
+  selectStorage(profile?: CloudProfile, library?: Library) {
+    return this.storageTask(() => this.storage!.select(profile, library));
+  }
+  copyStorage(profile?: CloudProfile, library?: Library) {
+    return this.storageTask(() => this.storage!.copyTo(profile, library));
+  }
   save(draft: Draft, previous?: Entry) {
+    let operationVault: PrivateArtVault | undefined;
     const entry = validateEntry(
       {
         ...draft,
@@ -209,6 +266,7 @@ export class TeamStore {
     );
     return this.mutate(
       async (_metadata, current) => {
+        operationVault = this.vault;
         const existing = [...current.entries, ...current.achievements].find(
           (e) => e.id === entry.id,
         );
@@ -242,14 +300,18 @@ export class TeamStore {
         };
       },
       () => {
-        if (entry.kind === "art" && entry.visibility !== "gm" && this.vault)
-          this.vault.write(this.vault.read().filter((e) => e.id !== entry.id));
+        if (entry.kind === "art" && entry.visibility !== "gm" && operationVault)
+          operationVault.write(
+            operationVault.read().filter((e) => e.id !== entry.id),
+          );
       },
     );
   }
   remove(previous: Entry) {
+    let operationVault: PrivateArtVault | undefined;
     return this.mutate(
       (_metadata, current) => {
+        operationVault = this.vault;
         const existing = [...current.entries, ...current.achievements].find(
           (e) => e.id === previous.id,
         );
@@ -273,9 +335,9 @@ export class TeamStore {
         return update;
       },
       () => {
-        if (previous.kind === "art" && this.vault)
-          this.vault.write(
-            this.vault.read().filter((e) => e.id !== previous.id),
+        if (previous.kind === "art" && operationVault)
+          operationVault.write(
+            operationVault.read().filter((e) => e.id !== previous.id),
           );
       },
     );
@@ -411,20 +473,23 @@ function demoSeed(): Metadata {
   };
 }
 export function createStore() {
-  if (!OBR.isAvailable) return new TeamStore(new DemoDriver(), true);
-  return new TeamStore({
-    ready: () => new Promise<void>((resolve) => OBR.onReady(resolve)),
-    read: () => OBR.room.getMetadata(),
-    write: (update) => OBR.room.setMetadata(update),
-    listen: (fn) => OBR.room.onMetadataChange(fn),
-    identity: async () => ({
-      role: await OBR.player.getRole(),
-      roomId: OBR.room.id,
-      playerId: OBR.player.id,
+  if (!OBR.isAvailable)
+    return new TeamStore(new StorageRouter(new DemoDriver()), true);
+  return new TeamStore(
+    new StorageRouter({
+      ready: () => new Promise<void>((resolve) => OBR.onReady(resolve)),
+      read: () => OBR.room.getMetadata(),
+      write: (update) => OBR.room.setMetadata(update),
+      listen: (fn) => OBR.room.onMetadataChange(fn),
+      identity: async () => ({
+        role: await OBR.player.getRole(),
+        roomId: OBR.room.id,
+        playerId: OBR.player.id,
+      }),
+      listenIdentity: (fn) =>
+        OBR.player.onChange((player) =>
+          fn({ role: player.role, roomId: OBR.room.id, playerId: player.id }),
+        ),
     }),
-    listenIdentity: (fn) =>
-      OBR.player.onChange((player) =>
-        fn({ role: player.role, roomId: OBR.room.id, playerId: player.id }),
-      ),
-  });
+  );
 }

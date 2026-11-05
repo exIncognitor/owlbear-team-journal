@@ -1,0 +1,6 @@
+{
+  "name":"team-journal-local-test",
+  "main":"server/worker.ts",
+  "compatibility_date":"2026-11-05",
+  "d1_databases":[{"binding":"DB","database_name":"team-journal-test","database_id":"00000000-0000-0000-0000-000000000001"}]
+}

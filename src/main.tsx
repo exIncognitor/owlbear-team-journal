@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import OBR from "@owlbear-rodeo/sdk";
 import { createStore } from "./store";
+import { StorageSettings } from "./StorageSettings";
 import {
   COINS,
   COIN_LABELS,
@@ -195,6 +196,7 @@ function App() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
+  const [storageOpen, setStorageOpen] = useState(false);
   const lock = useRef(false);
   useEffect(() => store.subscribe(setState), []);
   useEffect(() => {
@@ -224,13 +226,19 @@ function App() {
     setView(null);
   }, [state.role]);
   useEffect(() => {
+    setEditor(null);
+    setMoneyEditor(null);
+    setView(null);
+    if (state.role !== "GM") setStorageOpen(false);
+  }, [state.storage?.scope, state.role]);
+  useEffect(() => {
     if (!store.demo)
       OBR.onReady(() => {
         void OBR.action.setWidth(760).catch((e) => setError(String(e)));
         void OBR.action.setHeight(700).catch((e) => setError(String(e)));
         void OBR.action.setTitle("团队手记").catch((e) => setError(String(e)));
         void OBR.action
-          .setIcon("/icon.svg?v=0.2.0")
+          .setIcon("/icon.svg?v=0.3.0")
           .catch((e) => setError(String(e)));
       });
   }, []);
@@ -292,18 +300,40 @@ function App() {
       <header className="app-header">
         <Book size={20} />
         <span className="brand-name">团队手记</span>
+        {state.role === "GM" && store.storage && (
+          <button
+            className="quiet storage-open"
+            title="仅 DM 可管理存储来源与模组资料库"
+            aria-label="存储设置"
+            disabled={busy}
+            onClick={() => {
+              setError("");
+              setStorageOpen(true);
+            }}
+          >
+            ⚙
+          </button>
+        )}
         <span
           className={`room-usage${state.bytes >= 14000 ? " usage-warning" : ""}`}
           aria-label="共享数据占用"
           title={
             state.ready && !state.error
-              ? `${state.bytes.toLocaleString()} B；按整个房间 metadata 的 JSON UTF-8 字节测算，包含其他插件。16 kB = 16,000 B。${store.demo ? "当前为本地演示数据。" : ""}`
+              ? state.storage?.mode === "cloud"
+                ? `当前云端资料 ${state.bytes.toLocaleString()} B；房间共享数据 ${state.storage.roomBytes.toLocaleString()} / 16,000 B。DM 本机私密插画不计入。`
+                : `${state.bytes.toLocaleString()} B；按整个房间 metadata 的 JSON UTF-8 字节测算，包含其他插件。16 kB = 16,000 B。${store.demo ? "当前为本地演示数据。" : ""}`
               : "等待成功读取房间共享数据"
           }
         >
-          {store.demo ? "演示数据" : "房间共享"}{" "}
+          {state.storage?.mode === "cloud"
+            ? `云端 · ${state.storage.label}`
+            : store.demo
+              ? "演示数据"
+              : "房间共享"}{" "}
           {state.ready && !state.error
-            ? `${(state.bytes / 1000).toFixed(2)} / 16 kB`
+            ? state.storage?.mode === "cloud"
+              ? `${(state.bytes / 1000).toFixed(2)} kB`
+              : `${(state.bytes / 1000).toFixed(2)} / 16 kB`
             : "— / 16 kB"}
         </span>
       </header>
@@ -775,7 +805,9 @@ function App() {
           {state.ready
             ? store.demo
               ? "资料保存在当前浏览器"
-              : "已连接房间资料"
+              : state.storage?.mode === "cloud"
+                ? "已连接云端资料"
+                : "已连接房间资料"
             : "等待连接"}
         </span>
         <span>
@@ -819,6 +851,29 @@ function App() {
               })
             }
           />
+        </Modal>
+      )}
+      {storageOpen && state.role === "GM" && (
+        <Modal
+          locked={busy}
+          label="存储设置"
+          onClose={() => {
+            if (!busy) setStorageOpen(false);
+          }}
+        >
+          <>
+            {error && (
+              <p className="alert" role="alert">
+                {error}
+              </p>
+            )}
+            <StorageSettings
+              store={store}
+              busy={busy}
+              onRun={run}
+              onClose={() => setStorageOpen(false)}
+            />
+          </>
         </Modal>
       )}
       {moneyEditor && (
