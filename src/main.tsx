@@ -805,10 +805,10 @@ function App() {
         <span>
           <span className={"live-dot " + (!state.ready ? "offline" : "")} />
           {state.ready
-            ? store.demo
-              ? "资料保存在当前浏览器"
-              : state.storage?.mode === "cloud"
-                ? "已连接云端资料"
+            ? state.storage?.mode === "cloud"
+              ? "已连接云端资料"
+              : store.demo
+                ? "资料保存在当前浏览器"
                 : "已连接房间资料"
             : "等待连接"}
         </span>

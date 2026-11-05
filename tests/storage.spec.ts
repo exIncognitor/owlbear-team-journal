@@ -45,6 +45,36 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await mf?.dispose();
 });
+
+test("standalone demo reports cloud storage after connecting and browser storage after switching back", async ({
+  page,
+}) => {
+  await page.goto("/panel.html");
+  await expect(page.locator("footer")).toContainText("资料保存在当前浏览器");
+  await page.getByRole("button", { name: "存储设置", exact: true }).click();
+  await page.getByLabel("云端连接配置文件", { exact: true }).setInputFiles({
+    name: "test-cloud.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(config)),
+  });
+  await expect(page.getByRole("status")).toContainText("连接已验证");
+  await page.getByLabel("新资料库名称").fill("独立演示的测试资料库");
+  await page.getByRole("button", { name: "新建资料库", exact: true }).click();
+  await expect(page.getByLabel("模组资料库")).not.toHaveValue("");
+  await page
+    .getByRole("button", { name: "切换并保留原资料", exact: true })
+    .click();
+  await expect(page.locator("footer")).toContainText("已连接云端资料");
+  await expect(page.locator("footer")).not.toContainText(
+    "资料保存在当前浏览器",
+  );
+  await page.getByRole("button", { name: "存储设置", exact: true }).click();
+  await page.getByLabel("存储来源").selectOption("room");
+  await page
+    .getByRole("button", { name: "切换并保留原资料", exact: true })
+    .click();
+  await expect(page.locator("footer")).toContainText("资料保存在当前浏览器");
+});
 test("DM storage settings switch one room across two libraries and restore room data while players follow", async ({
   page,
 }) => {
