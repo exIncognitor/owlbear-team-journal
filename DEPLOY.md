@@ -1,6 +1,17 @@
 # Cloudflare Pages 部署
 
-## 当前发布 · 团队手记 v0.3.0 · 2026-11-05
+## 当前发布 · 团队手记 v0.3.1 · 2026-11-05
+
+- 在原 Pages 项目 `owlbear-twisted-moon` 完成 Production Direct Upload，13/13 文件上传成功并显示 Success。安装地址仍为 https://owlbear-twisted-moon.pages.dev/manifest.json ，浏览器读取清单确认版本 0.3.1。
+- 云端隐藏插画使用独立 D1 表 `journal_private_art` 与签名管理接口；共享模式保留原 DM 本机记录。复用现有 `DB` 绑定和管理公钥，新增表不清空原业务数据。
+- 在生产独立演示中连接已有“歪曲之月”资料库，完成真实签名私密读取，确认云端保存说明与“已连接云端资料”页脚；之后恢复独立演示原本的本机来源。未进入正式 Owlbear 房间，未编辑现有公开或私密战役记录；私密写入、失败保留、权限及清除网站数据后恢复由真实本地 D1 集成和浏览器测试覆盖。
+- 40 项逻辑/D1 测试、14 组完整浏览器回归及 TypeScript/Vite/Worker 构建通过。首次发布复核发现独立演示页脚旧提示，已修正并重新发布最终构建；不将中间发布包当作最终包。
+- 产品实现提交 `14a0221`，最终界面修正提交 `29bea5a`，测试修正提交 `f156a5b`；任务恢复点 `47c95c00fe4d82937187d8ac91bbc1610a1e2f29`。
+- 最终包 `DEPLOY-READY-v0.3.1.zip` 共 13 个文件，SHA-256 为 `237f2e443e1e6a7a31df00e61854e44f2cb2d0b7dc30f199f7083dc1d61f9aac`。已检查所有构建文件不含管理私钥，公钥与原管理配置匹配。截图与 ZIP 仅本地保留。
+- 最终生产凭证：`qa/v0.3.1/deploy-success-final.png`、`qa/v0.3.1/production-private-storage-final.png`；本地双端私密场景为 `qa/v0.3.1/cloud-private.png`。本版本未逐项核对线上静态文件哈希和 HTTP 响应头，不沿用旧版本结果。
+- 战斗插件按用户后续要求撤回新增的图库同步入口及版本改动，源码恢复为 `159381462a468ba8d79b840169426cadb7419bdb` 并重新构建通过，线上仍为 v0.5.3，本次没有发布战斗更新。
+
+## 历史发布 · 团队手记 v0.3.0 · 2026-11-05
 
 - 在原 Pages 项目 `owlbear-twisted-moon` 完成 Production Direct Upload；13/13 文件上传成功，Cloudflare 显示 Success。沿用原域名及安装地址 https://owlbear-twisted-moon.pages.dev/manifest.json 。
 - 浏览器实际读取生产清单，确认 version 为 0.3.0、书本图标及 760 × 700 原生入口；实际打开 `/panel`，确认新增 DM 存储设置。
