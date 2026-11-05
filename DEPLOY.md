@@ -1,6 +1,19 @@
 # Cloudflare Pages 部署
 
-## 当前发布 · 团队手记 v0.2.0 · 2026-11-05
+## 当前发布 · 团队手记 v0.3.0 · 2026-11-05
+
+- 在原 Pages 项目 `owlbear-twisted-moon` 完成 Production Direct Upload；13/13 文件上传成功，Cloudflare 显示 Success。沿用原域名及安装地址 https://owlbear-twisted-moon.pages.dev/manifest.json 。
+- 浏览器实际读取生产清单，确认 version 为 0.3.0、书本图标及 760 × 700 原生入口；实际打开 `/panel`，确认新增 DM 存储设置。
+- 免费 D1 `team-journal`（ID `c92c3522-b469-479c-a8c6-47e0c73706b3`）已创建，生产绑定变量 `DB` 已保存并随本次部署生效。包内为已打包 `_worker.js`，`_routes.json` 仅让 `/api/*` 调用 Worker。
+- 在生产独立演示的 DM 设置导入本机管理连接，真实签名验证及资料库列表读取成功，并创建空资料库“歪曲之月”。未复制演示资料，未进入或修改正式 Owlbear 房间；真实房间 DM 仍需首次导入自己的管理配置。
+- 首次配置见 [CLOUD-STORAGE.md](CLOUD-STORAGE.md)：连接文件位于 `C:\Users\12137\AppData\Local\TeamJournal\connections\team-journal-cloud.json`，只在本机保存，不提交或部署。后端只含公钥；构建已核验不含管理私钥。
+- 产品源码提交：`56f58b3`；任务前 Git 恢复点：`201a0ce8a0ae149cbecdcdd7c99d7c9d4aba6bec`。版本 ZIP `DEPLOY-READY-v0.3.0.zip` 共 13 个文件，SHA-256 为 `da3fb5f4a7d4e0ed418b96eb05b7894feb17e037a5337e5c1cc7cb8f96b01d97`。
+- 本地 34 项逻辑/D1 集成测试、13 组浏览器回归及 TypeScript/Vite/Worker 构建通过。生产浏览器验证不等于真实房间联机验收。
+- 凭证：`qa/d1-created-v0.3.0.png`、`qa/d1-binding-v0.3.0.png`、`qa/deploy-success-v0.3.0.png`、`qa/production-storage-v0.3.0.png`。截图与版本 ZIP 仅本地保留，不上传源码或作为站点资源。
+- 本轮命令行访问 Pages 曾返回 HTTP 403 / Cloudflare 1010，浏览器正常。本次未完成逐文件线上哈希及实际 HTTP 响应头核对，不沿用旧版本检查作为当前结果。
+- 当前房间的来源选择与其他房间隔离。切换保留原资料；复制仅写入空目标。新云端库当前没有业务资料，正式房间仍保持原来源。私有图片仓库及不部署图片站的决定保持不变。
+
+## 历史发布 · 团队手记 v0.2.0 · 2026-11-05
 
 - 原项目 `owlbear-twisted-moon` 免费 Direct Upload 更新完成，Cloudflare 显示 Success，11/11 文件上传成功；没有新建图片站，没有修改战斗插件。
 - 安装链接保持 https://owlbear-twisted-moon.pages.dev/manifest.json 。浏览器实际打开清单，确认 name/title 为“团队手记”、version 为 0.2.0、书本图标版本参数、760 × 700 原生 Action 入口。
