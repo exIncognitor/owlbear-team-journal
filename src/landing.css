@@ -111,35 +111,17 @@ main {
   color: #71687e;
   margin-top: 20px;
 }
-.moon-art {
+.book-art {
   height: 430px;
   position: relative;
   display: grid;
   place-items: center;
 }
-.orb {
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 26% 30%,
-    #f0d9b0,
-    #bda37d 52%,
-    #6d5874 91%
-  );
-  box-shadow:
-    0 0 70px #c5a5770b,
-    0 0 180px #86709216;
-  position: relative;
-  overflow: hidden;
-}
-.orb:after {
-  content: "";
-  position: absolute;
-  inset: -24px -36px 32px 65px;
-  border-radius: 50%;
-  background: #0b0c11;
-  box-shadow: -6px 3px 16px #0008;
+.journal-art {
+  width: 210px;
+  height: 210px;
+  filter: invert(81%) sepia(24%) saturate(415%);
+  transform: rotate(-8deg);
 }
 .orbit {
   position: absolute;
@@ -175,7 +157,7 @@ main {
   top: 15%;
   font-size: 32px;
 }
-.moon-label {
+.book-label {
   position: absolute;
   text-align: center;
   bottom: 3px;
@@ -184,7 +166,7 @@ main {
   color: #a58e72;
   line-height: 2;
 }
-.moon-label span {
+.book-label span {
   font-size: 8px;
   color: #665a72;
   letter-spacing: 2px;
@@ -193,7 +175,7 @@ main {
   border-top: 1px solid #2d2735;
   border-bottom: 1px solid #2d2735;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   margin: 0 0 100px;
   padding: 32px 0;
 }
@@ -394,11 +376,11 @@ footer span:last-child {
   .intro {
     font-size: 12px;
   }
-  .moon-art {
+  .book-art {
     height: 340px;
     margin-bottom: 40px;
   }
-  .orb {
+  .journal-art {
     width: 190px;
     height: 190px;
   }
@@ -410,7 +392,7 @@ footer span:last-child {
     width: 320px;
     height: 320px;
   }
-  .moon-label {
+  .book-label {
     bottom: 0;
   }
   .features {

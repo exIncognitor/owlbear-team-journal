@@ -1,46 +1,56 @@
-# 歪曲之月 · 团队手记
+# 团队手记
 
-独立的 Owlbear Rodeo 资料插件。月亮图标、760 × 700 原生黑底面板，玩家与 DM 均可编辑。与战斗序列插件使用不同仓库、站点与数据命名空间。
+Owlbear Rodeo 资料插件：书本图标、760 × 700 原生黑底面板，玩家与 DM 均可编辑公开资料。沿用原来的站点与数据命名空间，更新不清空现有房间资料。
 
-安装地址（已发布 v0.1.0）：https://owlbear-twisted-moon.pages.dev/manifest.json
-
-产品主页：https://owlbear-twisted-moon.pages.dev/ · 独立演示：https://owlbear-twisted-moon.pages.dev/panel.html
-
-源码：https://github.com/exIncognitor/owlbear-twisted-moon
+- 安装链接：https://owlbear-twisted-moon.pages.dev/manifest.json
+- 产品主页：https://owlbear-twisted-moon.pages.dev/
+- 独立演示：https://owlbear-twisted-moon.pages.dev/panel.html
+- 源码：https://github.com/exIncognitor/owlbear-twisted-moon
 
 ## 功能
 
-- 团队仓库：铂币、金币、琥珀金币、银币、铜币分别记账；道具与装备的名称、数量、保管人、说明可编辑，支持搜索与分类。
+- 团队仓库：五类钱币分别记账；道具与装备的名称、数量、保管人、说明可编辑，支持搜索与分类。
 - 情报：线索、人物、地点、其他分类；多行正文、跟进/已整理状态、搜索。
-- 插画：本地文件上传至 Owlbear 图库、从图库选择、添加 HTTPS 图片链接；标题、说明、当前展示、大图查看。
-- 玩家和 DM 共用同一套新增、修改、移除、展示入口；所有资料对房间成员可见。
-- 数据按房间共享，切换场景也保留；不依赖打开场景，不读取或修改地图 Token。
-- 导出备份保留本插件的完整原始数据，包含无法解析的条目；图库图片保留 URL 引用，图片原件不包含在 JSON 中。
+- 插画只有两种导入方式：“从图库选择”和“从链接导入”。图库按钮直接调用官方选择器，不打开本地文件框、不调用上传 API。图片原件需先存入 Owlbear 图库，或已有可公开访问的 HTTPS 图片直链。
+- 插画支持标题、说明、大图与全队展示。DM 可以选择“玩家可见”或“仅 DM 可见”。玩家可编辑公开插画，不能设置私密可见性。
+- 成就：左侧小配图、右侧文字的深色长条列表，所有人可见，仅 DM 可新增、编辑与移除；配图仅接受 HTTPS 链接。标题、达成人、描述和品质显示为内容，不显示字段标签。
+- 内置“欢迎来到德鲁斯肯瓦尔德”：团队 / 来到德鲁斯肯瓦尔德 / 普通，配村落入口简笔画。默认卡片不写入房间；DM 修改后保存到独立成就键，删除后不会自动重建。
+- 顶栏紧凑，显示整个房间共享数据占用，按 JSON UTF-8 测算，包含其他插件；悬停查看精确字节。演示状态明确标记“演示数据”。无大标题和导出备份按钮。
+- 点击书本图标打开，再次点击关闭；不读取或修改地图 Token。
 
-“展示给全队”同步插画页中的当前展示，队友打开该面板的插画页即可看到；不会强制弹出其他人的面板。
+## DM 私密插画
 
-## 图片上传
+- DM 新增插画默认“仅 DM 可见”；玩家新增默认公开；旧版已有插画保持公开。
+- 隐藏插画的链接、标题和说明仅保存于 DM 当前浏览器 localStorage，按房间和账号隔离，不写入 room/player metadata。图片文件仍在来源图库或图片站。
+- 不跨设备或浏览器同步，清除浏览器数据会丢失隐藏记录。请保留原图与来源链接；界面会标明这个边界。
+- 公开后才将引用同步到房间；重新隐藏会移除共享引用，并结束这张图的全队展示。玩家已打开的大图会关闭。已经看过、下载或复制的图片无法撤回。
+- 先保存本地副本再隐藏；公开成功后才清理本地副本。发生写入失败时保留可恢复副本，并显示错误，不把仍公开的记录标为私密。
+- DM 降为玩家时立即隐藏本地私密记录、关闭相关视图，并重新核实编辑身份。
+- 这是插件对真实角色的操作控制；公开 room metadata 本身没有服务端写入权限隔离。
 
-1. 在插画页点击“上传插画”，选择 PNG、JPEG 或 WebP（不超过 20 MB）。
-2. 按 Owlbear 的原生文件夹选择器完成上传。
-3. 在随后的图库选择器中选中刚上传的图片，再保存标题和说明。
-
-官方 uploadImages 不返回图片 URL，因此必须经过图库选择确认，取消选择不会生成空条目。也可先在 Owlbear 图库上传，再使用“从图库选择”。上传取决于使用者的 Owlbear 登录与图库配额；本插件不自动购买储存、不增加外部图床。删除插画条目不删除图库原件。来源文件不随站点或源码上传。
-
-Owlbear 之外打开 /panel.html 是独立演示：资料仅存于浏览器，演示图片缩放后本地保存，不代表真实房间上传已通过。
+“展示给全队”同步插画页中的当前展示，不强制弹出队友面板。私密插画必须先公开才能全队展示。
 
 ## 数据与容量
 
-- 命名空间：`io.twisted-moon.v1/`；每条物品、情报、插画独立键存储在 room metadata，钱币按币种分别存储。其他插件数据不改写。
-- 大文本按条目 gzip 压缩并限制解压长度；真实房间只存插画引用，禁止写入图片二进制或 data URL。
-- Owlbear 的 **16 kB 房间 metadata 是所有插件共享的总量**。本插件在 15,500 字节预算前拦截保存，计入其他插件已有数据。压缩可减少占用，不能提供无限空间；如果需要大量长篇情报，后续应另设服务端存储。
-- 编辑前重新读取，检测已变化的条目版本，阻止已知的陈旧编辑覆盖。不同条目使用部分更新。完全同时写同一条记录仍可能最后写入覆盖；没有服务端事务或锁。
-- 解析失败时显示错误、保留原数据并暂停编辑；仍可导出原始备份。不自动清空或重建用户数据。移除条目需要再次确认。
-- 所有人可编辑是产品功能，不是服务端防作弊系统；不要在这里放 DM 秘密或凭据。
+- 保留命名空间 `io.twisted-moon.v1/` 与演示键 `twisted-moon.demo.v1`；每条记录、每种钱币使用独立键，其他插件数据不改写。
+- 成就使用 `io.twisted-moon.v1/achievement/` 独立键，DM 操作时使用实际 Owlbear 角色校验；其他分区的玩家编辑功能不变。
+- 公开资料存在 room metadata，切换场景仍保留；大文本按条目 gzip 压缩并限制解压长度。房间只存图片引用，禁止图片二进制或 data URL。
+- 房间 metadata 的 16 kB 总量由所有插件共享，本插件在 15,500 字节预算前拦截保存。DM 本地私密记录不计入这个容量。
+- 编辑前重新读取并检查记录版本，阻止已知的陈旧编辑覆盖。完全同时写同一记录仍可能最后写入覆盖；没有服务端事务锁。
+- 解析失败保留原始数据并暂停编辑；移除需要确认。内部原始备份方法保留用于维护，界面不提供导出按钮。
+- 独立演示仅保存在当前浏览器，以 DM 身份演示；不代表真实房间验收。
 
-## 开发
+## 私有图片仓库
 
-Node >=22.12，依赖沿用已验证的 React/TypeScript/Vite 与官方 SDK 3.1.0 锁定版本。
+用户选择只建私有 GitHub 仓库、不部署图片 Cloudflare 站点：
+
+- 仓库：https://github.com/exIncognitor/dnd-github-images
+- 本地：`D:\desktop\dnd\DndGithubImages`，图片放入 `images/`。
+- 初始化时没有图片。私有仓库普通 Raw 链接不能作为玩家免登录图床；不要在房间中粘贴带 token 的链接或凭据。
+
+## 开发与验证
+
+Node >=22.12，沿用官方 SDK 与现有锁定依赖。
 
 ```sh
 npm ci
@@ -50,12 +60,12 @@ npm run test:e2e
 npm run dev -- --host 127.0.0.1 --port 5183
 ```
 
-根路径为产品主页；/panel.html 为插件和独立演示；/manifest.json 为清单。发布流程与核对结果见 DEPLOY.md 和 TEST-REPORT.md。
-
-本项目未新增一般代码许可证。没有导入战役原稿、剧情、备团文件或私有插画。真实房间测试按既有安排由用户进行。
+部署记录见 DEPLOY.md，验证记录见 TEST-REPORT.md。真实房间测试按用户安排由用户进行。未修改战斗面板项目，未上传战役原稿、私有插画或凭据。
 
 ## 官方依据
 
 - [原生 Action](https://docs.owlbear.rodeo/extensions/apis/action/)
-- [房间 metadata 与 16 kB 限制](https://docs.owlbear.rodeo/extensions/apis/room/)
-- [图片上传与图库选择](https://docs.owlbear.rodeo/extensions/apis/assets/)
+- [房间 metadata](https://docs.owlbear.rodeo/extensions/apis/room/)
+- [图库选择](https://docs.owlbear.rodeo/extensions/apis/assets/)
+- [玩家角色与事件](https://docs.owlbear.rodeo/extensions/apis/player/)
+- [共享 Metadata](https://docs.owlbear.rodeo/extensions/reference/metadata/)

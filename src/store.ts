@@ -1,6 +1,8 @@
-import OBR, { buildImageUpload } from "@owlbear-rodeo/sdk";
+import OBR from "@owlbear-rodeo/sdk";
+import { BrowserArtVault, type PrivateArtVault } from "./private-art";
 import {
   COINS,
+  ACHIEVEMENT_PREFIX,
   DISPLAY_KEY,
   PREFIX,
   RECORD_PREFIX,
@@ -12,7 +14,6 @@ import {
   readSnapshot,
   safeImageUrl,
   validateEntry,
-  validateFile,
   verifyRevision,
   type Artwork,
   type Coin,
@@ -21,22 +22,35 @@ import {
   type Metadata,
   type Snapshot,
 } from "./model";
+export interface Identity {
+  role: "GM" | "PLAYER";
+  roomId: string;
+  playerId: string;
+}
 export interface Driver {
   ready(): Promise<void>;
   read(): Promise<Metadata>;
   write(update: Metadata): Promise<void>;
   listen(fn: (data: Metadata) => void): () => void;
+  identity?(): Promise<Identity>;
+  listenIdentity?(fn: (identity: Identity) => void): () => void;
 }
 export class TeamStore {
   state = emptySnapshot();
   private listeners = new Set<(snapshot: Snapshot) => void>();
   private off?: () => void;
+  private offIdentity?: () => void;
+  private offVault?: () => void;
+  private identity: Identity = { role: "PLAYER", roomId: "", playerId: "" };
+  private vault?: PrivateArtVault;
   private lifecycle = 0;
   private generation = 0;
   private queue: Promise<unknown> = Promise.resolve();
   constructor(
     private driver: Driver,
     readonly demo = false,
+    private makeVault: (identity: Identity) => PrivateArtVault = (identity) =>
+      new BrowserArtVault(identity.roomId, identity.playerId, demo),
   ) {}
   subscribe(fn: (snapshot: Snapshot) => void) {
     this.listeners.add(fn);
@@ -49,16 +63,49 @@ export class TeamStore {
         ++this.generation;
         this.off?.();
         this.off = undefined;
+        this.offIdentity?.();
+        this.offVault?.();
+        this.offIdentity = this.offVault = undefined;
       }
     };
   }
   private emit() {
     for (const fn of this.listeners) fn(this.state);
   }
+  private configureIdentity(identity: Identity) {
+    this.offVault?.();
+    this.identity = identity;
+    this.vault = identity.role === "GM" ? this.makeVault(identity) : undefined;
+    this.offVault = this.vault?.listen(() => {
+      void this.refresh();
+    });
+    ++this.generation;
+    // Clear open private records immediately on role/account changes.
+    this.state = {
+      ...this.state,
+      role: identity.role,
+      entries: this.state.entries.filter(
+        (e) => e.kind !== "art" || e.visibility !== "gm",
+      ),
+    };
+    this.emit();
+  }
+  private async snapshot(metadata: Metadata) {
+    const state = await readSnapshot(metadata, this.demo);
+    state.role = this.identity.role;
+    // Public data wins if a previous hide attempt was not acknowledged.
+    const ids = new Set(state.entries.map((e) => e.id));
+    const privateArt = this.vault?.read().filter((e) => !ids.has(e.id)) ?? [];
+    state.entries = [
+      ...state.entries.filter((e) => e.kind !== "art" || e.visibility !== "gm"),
+      ...privateArt,
+    ].sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+    return state;
+  }
   private async receive(metadata: Metadata, lifecycle: number) {
     const generation = ++this.generation;
     try {
-      const state = await readSnapshot(metadata, this.demo);
+      const state = await this.snapshot(metadata);
       if (lifecycle === this.lifecycle && generation === this.generation) {
         this.state = state;
         this.emit();
@@ -78,6 +125,19 @@ export class TeamStore {
     try {
       await this.driver.ready();
       if (lifecycle !== this.lifecycle) return;
+      const identity = (await this.driver.identity?.()) ?? this.identity;
+      if (lifecycle !== this.lifecycle) return;
+      this.configureIdentity(identity);
+      this.offIdentity = this.driver.listenIdentity?.((next) => {
+        if (
+          next.role === this.identity.role &&
+          next.roomId === this.identity.roomId &&
+          next.playerId === this.identity.playerId
+        )
+          return;
+        this.configureIdentity(next);
+        void this.refresh();
+      });
       this.off = this.driver.listen((data) => {
         void this.receive(data, lifecycle);
       });
@@ -106,16 +166,33 @@ export class TeamStore {
       metadata: Metadata,
       current: Snapshot,
     ) => Promise<Metadata> | Metadata,
+    afterWrite?: () => void,
   ) {
     const task = this.queue.then(async () => {
       if (!this.state.ready) throw Error("资料尚未连接，请稍后重试");
+      const identity = await this.driver.identity?.();
+      if (
+        identity &&
+        (identity.role !== this.identity.role ||
+          identity.playerId !== this.identity.playerId ||
+          identity.roomId !== this.identity.roomId)
+      ) {
+        this.configureIdentity(identity);
+        await this.refresh();
+        throw Error("当前身份已变化，请重新打开编辑器");
+      }
       const metadata = await this.driver.read();
-      const current = await readSnapshot(metadata, this.demo);
+      const current = await this.snapshot(metadata);
       const update = await makeUpdate(metadata, current);
-      if (!Object.keys(update).length) return;
-      if (!this.demo) checkCapacity({ ...metadata, ...update });
-      await this.driver.write(update);
-      await this.refresh();
+      try {
+        if (Object.keys(update).length) {
+          if (!this.demo) checkCapacity({ ...metadata, ...update });
+          await this.driver.write(update);
+        }
+        afterWrite?.();
+      } finally {
+        await this.refresh();
+      }
     });
     this.queue = task.catch(() => {});
     return task;
@@ -130,26 +207,78 @@ export class TeamStore {
       },
       this.demo,
     );
-    return this.mutate(async (_metadata, current) => {
-      verifyRevision(
-        current.entries.find((e) => e.id === entry.id),
-        previous?.rev,
-      );
-      return {
-        [RECORD_PREFIX + entry.id]: this.demo ? entry : await pack(entry),
-      };
-    });
+    return this.mutate(
+      async (_metadata, current) => {
+        const existing = [...current.entries, ...current.achievements].find(
+          (e) => e.id === entry.id,
+        );
+        if (
+          (entry.kind === "achievement" || existing?.kind === "achievement") &&
+          current.role !== "GM"
+        )
+          throw Error("只有 DM 可以编辑成就");
+        verifyRevision(existing, previous?.rev);
+        if (entry.kind === "art" && entry.visibility === "gm") {
+          if (current.role !== "GM" || !this.vault)
+            throw Error("只有 DM 可以设置插画可见性");
+          // Save a private copy before removing a formerly public reference.
+          // If the room write fails, the public record remains visibly public.
+          this.vault.write([
+            ...this.vault.read().filter((e) => e.id !== entry.id),
+            entry,
+          ]);
+          if (
+            !previous ||
+            (previous.kind === "art" && previous.visibility === "gm")
+          )
+            return {};
+          const update: Metadata = { [RECORD_PREFIX + entry.id]: null };
+          if (current.shownId === entry.id) update[DISPLAY_KEY] = { id: null };
+          return update;
+        }
+        return {
+          [(entry.kind === "achievement" ? ACHIEVEMENT_PREFIX : RECORD_PREFIX) +
+          entry.id]: this.demo ? entry : await pack(entry),
+        };
+      },
+      () => {
+        if (entry.kind === "art" && entry.visibility !== "gm" && this.vault)
+          this.vault.write(this.vault.read().filter((e) => e.id !== entry.id));
+      },
+    );
   }
   remove(previous: Entry) {
-    return this.mutate((_metadata, current) => {
-      verifyRevision(
-        current.entries.find((e) => e.id === previous.id),
-        previous.rev,
-      );
-      const update: Metadata = { [RECORD_PREFIX + previous.id]: null };
-      if (current.shownId === previous.id) update[DISPLAY_KEY] = { id: null };
-      return update;
-    });
+    return this.mutate(
+      (_metadata, current) => {
+        const existing = [...current.entries, ...current.achievements].find(
+          (e) => e.id === previous.id,
+        );
+        if (existing?.kind === "achievement" && current.role !== "GM")
+          throw Error("只有 DM 可以移除成就");
+        verifyRevision(existing, previous.rev);
+        if (previous.kind === "art" && previous.visibility === "gm") {
+          if (current.role !== "GM" || !this.vault)
+            throw Error("只有 DM 可以修改私密插画");
+          this.vault.write(
+            this.vault.read().filter((e) => e.id !== previous.id),
+          );
+          return {};
+        }
+        const update: Metadata = {
+          [(existing?.kind === "achievement"
+            ? ACHIEVEMENT_PREFIX
+            : RECORD_PREFIX) + previous.id]: null,
+        };
+        if (current.shownId === previous.id) update[DISPLAY_KEY] = { id: null };
+        return update;
+      },
+      () => {
+        if (previous.kind === "art" && this.vault)
+          this.vault.write(
+            this.vault.read().filter((e) => e.id !== previous.id),
+          );
+      },
+    );
   }
   money(values: Record<Coin, number>, base: Snapshot["money"]) {
     return this.mutate((_metadata, current) => {
@@ -168,6 +297,13 @@ export class TeamStore {
     return this.mutate((_metadata, current) => {
       if (id && !current.entries.some((e) => e.id === id && e.kind === "art"))
         throw Error("这张插画已被移除");
+      if (
+        id &&
+        current.entries.some(
+          (e) => e.id === id && e.kind === "art" && e.visibility === "gm",
+        )
+      )
+        throw Error("请先将插画设为玩家可见，再展示给全队");
       return { [DISPLAY_KEY]: { id } };
     });
   }
@@ -189,30 +325,13 @@ export class TeamStore {
   }
   async pick(search = ""): Promise<Pick<Artwork, "title" | "url"> | null> {
     if (this.demo)
-      throw Error("独立演示请使用上传图片或图片链接；Owlbear 图库在房间内可用");
-    const images = await OBR.assets.downloadImages(false, search, "PROP");
+      throw Error("独立演示请从链接导入；Owlbear 图库在房间内可用");
+    const images = await OBR.assets.downloadImages(false, search);
     if (!images.length) return null;
     return {
       title: images[0].name.slice(0, 80) || "未命名插画",
       url: safeImageUrl(images[0].image.url),
     };
-  }
-  async upload(file: File): Promise<Pick<Artwork, "title" | "url"> | null> {
-    validateFile(file);
-    if (this.demo) return demoImage(file);
-    // SDK upload is intentionally void. Ask the native picker for the resulting
-    // asset; never claim an upload is shared until a real URL has been selected.
-    const copy = new File([await file.arrayBuffer()], file.name, {
-      type: file.type,
-    });
-    try {
-      await OBR.assets.uploadImages([buildImageUpload(copy).build()], "PROP");
-    } catch (e) {
-      throw Error(
-        `图库上传未确认完成：${e instanceof Error ? e.message : String(e)}。请在 Owlbear 完成上传后，使用「从图库选择」。`,
-      );
-    }
-    return this.pick(file.name.replace(/\.[^.]+$/, ""));
   }
 }
 const DEMO_KEY = "twisted-moon.demo.v1";
@@ -220,6 +339,9 @@ export class DemoDriver implements Driver {
   private listeners = new Set<(data: Metadata) => void>();
   ready() {
     return Promise.resolve();
+  }
+  async identity(): Promise<Identity> {
+    return { role: "GM", roomId: "demo", playerId: "demo" };
   }
   async read(): Promise<Metadata> {
     const raw = localStorage.getItem(DEMO_KEY);
@@ -230,7 +352,7 @@ export class DemoDriver implements Driver {
     try {
       localStorage.setItem(DEMO_KEY, JSON.stringify(next));
     } catch {
-      throw Error("本地演示储存空间不足，请先导出备份或使用较小的图片");
+      throw Error("本地演示储存空间不足，请减少演示资料或使用较短的图片链接");
     }
     this.listeners.forEach((fn) => fn(next));
   }
@@ -288,24 +410,6 @@ function demoSeed(): Metadata {
     [moneyKey("sp")]: { value: 30, rev: "seed" },
   };
 }
-async function demoImage(file: File) {
-  const bitmap = await createImageBitmap(file);
-  try {
-    const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    const context = canvas.getContext("2d");
-    if (!context) throw Error("无法读取图片");
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return {
-      title: file.name.replace(/\.[^.]+$/, "").slice(0, 80) || "未命名插画",
-      url: safeImageUrl(canvas.toDataURL("image/webp", 0.82), true),
-    };
-  } finally {
-    bitmap.close();
-  }
-}
 export function createStore() {
   if (!OBR.isAvailable) return new TeamStore(new DemoDriver(), true);
   return new TeamStore({
@@ -313,5 +417,14 @@ export function createStore() {
     read: () => OBR.room.getMetadata(),
     write: (update) => OBR.room.setMetadata(update),
     listen: (fn) => OBR.room.onMetadataChange(fn),
+    identity: async () => ({
+      role: await OBR.player.getRole(),
+      roomId: OBR.room.id,
+      playerId: OBR.player.id,
+    }),
+    listenIdentity: (fn) =>
+      OBR.player.onChange((player) =>
+        fn({ role: player.role, roomId: OBR.room.id, playerId: player.id }),
+      ),
   });
 }

@@ -1,5 +1,7 @@
 export const PREFIX = "io.twisted-moon.v1/";
 export const RECORD_PREFIX = PREFIX + "entry/";
+export const ACHIEVEMENT_PREFIX = PREFIX + "achievement/";
+export const QUALITIES = ["普通", "优秀", "稀有", "史诗", "传说"] as const;
 export const COINS = ["pp", "gp", "ep", "sp", "cp"] as const;
 export type Coin = (typeof COINS)[number];
 export const COIN_LABELS: Record<Coin, string> = {
@@ -33,18 +35,40 @@ export interface Artwork extends Base {
   kind: "art";
   url: string;
   caption: string;
+  visibility?: "players" | "gm";
 }
-export type Entry = Item | Intel | Artwork;
+export interface Achievement extends Base {
+  kind: "achievement";
+  recipient: string;
+  description: string;
+  quality: (typeof QUALITIES)[number];
+  url: string;
+}
+export const WELCOME_ACHIEVEMENT: Achievement = {
+  kind: "achievement",
+  id: "welcome-druskenvald",
+  rev: "builtin-v1",
+  updatedAt: 0,
+  title: "欢迎来到德鲁斯肯瓦尔德",
+  recipient: "团队",
+  description: "来到德鲁斯肯瓦尔德",
+  quality: "普通",
+  url: "https://owlbear-twisted-moon.pages.dev/achievements/welcome.svg",
+};
+export type Entry = Item | Intel | Artwork | Achievement;
 export type Draft =
   | (Omit<Item, keyof Base> & { title: string })
   | (Omit<Intel, keyof Base> & { title: string })
-  | (Omit<Artwork, keyof Base> & { title: string });
+  | (Omit<Artwork, keyof Base> & { title: string })
+  | (Omit<Achievement, keyof Base> & { title: string });
 export interface Money {
   value: number;
   rev: string;
 }
 export interface Snapshot {
+  role: "GM" | "PLAYER";
   entries: Entry[];
+  achievements: Achievement[];
   money: Record<Coin, Money>;
   shownId: string | null;
   ready: boolean;
@@ -55,7 +79,9 @@ export const moneyKey = (coin: Coin) => PREFIX + "money/" + coin;
 export const DISPLAY_KEY = PREFIX + "display";
 export function emptySnapshot(): Snapshot {
   return {
+    role: "PLAYER",
     entries: [],
+    achievements: [],
     money: Object.fromEntries(
       COINS.map((c) => [c, { value: 0, rev: "" }]),
     ) as Record<Coin, Money>,
@@ -148,13 +174,33 @@ export function validateEntry(value: unknown, demo = false): Entry {
       resolved: d.resolved,
     };
   }
-  if (d.kind === "art")
+  if (d.kind === "art") {
+    if (
+      d.visibility != null &&
+      d.visibility !== "players" &&
+      d.visibility !== "gm"
+    )
+      throw Error("插画可见性无效");
     return {
       ...base,
       kind: "art",
       url: safeImageUrl(d.url, demo),
       caption: text(d.caption, "插画说明", 1000),
+      visibility: d.visibility === "gm" ? "gm" : "players",
     };
+  }
+  if (d.kind === "achievement") {
+    if (!QUALITIES.includes(d.quality as Achievement["quality"]))
+      throw Error("请选择成就品质");
+    return {
+      ...base,
+      kind: "achievement",
+      recipient: text(d.recipient, "达成人", 120, true),
+      description: text(d.description, "描述", 1000, true),
+      quality: d.quality as Achievement["quality"],
+      url: safeImageUrl(d.url),
+    };
+  }
   throw Error("未知资料类型，未修改原数据");
 }
 export function metadataBytes(metadata: Metadata) {
@@ -163,7 +209,7 @@ export function metadataBytes(metadata: Metadata) {
 export function checkCapacity(metadata: Metadata) {
   if (metadataBytes(metadata) > 15500)
     throw Error(
-      "房间共享资料空间不足。请先导出备份，缩短长说明或移除不用的条目；图片请使用图库引用。",
+      "房间共享资料空间不足。请缩短长说明或移除不用的条目；图片请使用图库引用。",
     );
 }
 // Compress each entry separately: room metadata has a shared 16 kB budget.
@@ -232,6 +278,27 @@ export async function readSnapshot(
         }),
     )
   ).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+  state.achievements = await Promise.all(
+    Object.entries(metadata)
+      .filter(
+        ([key, value]) => key.startsWith(ACHIEVEMENT_PREFIX) && value != null,
+      )
+      .map(async ([key, value]) => {
+        const entry = validateEntry(await unpack(value));
+        if (
+          entry.kind !== "achievement" ||
+          key !== ACHIEVEMENT_PREFIX + entry.id
+        )
+          throw Error("成就格式或编号不正确，原数据已保留");
+        return entry;
+      }),
+  );
+  // Built-in welcome card needs no room write; an explicit tombstone removes it.
+  if (!Object.hasOwn(metadata, ACHIEVEMENT_PREFIX + WELCOME_ACHIEVEMENT.id))
+    state.achievements.push({ ...WELCOME_ACHIEVEMENT });
+  state.achievements.sort(
+    (a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id),
+  );
   for (const coin of COINS) {
     const raw = metadata[moneyKey(coin)];
     if (raw != null) {

@@ -5,6 +5,8 @@ import { createStore } from "./store";
 import {
   COINS,
   COIN_LABELS,
+  QUALITIES,
+  WELCOME_ACHIEVEMENT,
   emptySnapshot,
   type Artwork,
   type Coin,
@@ -17,9 +19,9 @@ import {
 import "./style.css";
 
 const store = createStore();
-type Tab = "item" | "intel" | "art";
+type Tab = "item" | "intel" | "art" | "achievement";
 type Editor = { draft: Draft; previous?: Entry };
-function Moon({ size = 28 }: { size?: number }) {
+function Book({ size = 28 }: { size?: number }) {
   return (
     <svg
       width={size}
@@ -29,19 +31,15 @@ function Moon({ size = 28 }: { size?: number }) {
       aria-hidden="true"
     >
       <path
-        d="M26.9 20.2A12 12 0 0 1 11.8 5.1a12 12 0 1 0 15.1 15.1Z"
+        d="M16 8C12 5 7 5 3 6v21c4-1 9-1 13 2 4-3 9-3 13-2V6c-4-1-9-1-13 2Zm0 0v21M7 11c2-.3 4 0 6 1M7 16c2-.3 4 0 6 1m6-5c2-1 4-1.3 6-1m-6 6c2-1 4-1.3 6-1"
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinejoin="round"
       />
-      <path
-        d="m23.5 4.5.8 2.7 2.7.8-2.7.8-.8 2.7-.8-2.7-2.7-.8 2.7-.8Z"
-        fill="currentColor"
-      />
     </svg>
   );
 }
-function Symbol({ kind }: { kind: Tab | "search" | "edit" | "download" }) {
+function Symbol({ kind }: { kind: Tab | "search" | "edit" }) {
   const paths = {
     item: (
       <>
@@ -60,6 +58,12 @@ function Symbol({ kind }: { kind: Tab | "search" | "edit" | "download" }) {
         <circle cx="16" cy="9" r="1" />
       </>
     ),
+    achievement: (
+      <>
+        <circle cx="12" cy="9" r="6" />
+        <path d="m8 14-2 7 6-3 6 3-2-7M12 5l1.2 2.5 2.8.4-2 2 .5 2.7-2.5-1.3-2.5 1.3.5-2.8-2-1.9 2.8-.4z" />
+      </>
+    ),
     search: (
       <>
         <circle cx="10" cy="10" r="6" />
@@ -69,11 +73,6 @@ function Symbol({ kind }: { kind: Tab | "search" | "edit" | "download" }) {
     edit: (
       <>
         <path d="m15 4 5 5-11 11H4v-5zM12 7l5 5" />
-      </>
-    ),
-    download: (
-      <>
-        <path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" />
       </>
     ),
   };
@@ -93,7 +92,7 @@ function Symbol({ kind }: { kind: Tab | "search" | "edit" | "download" }) {
     </svg>
   );
 }
-function fresh(kind: Tab): Draft {
+function fresh(kind: Tab, role: Snapshot["role"] = "PLAYER"): Draft {
   if (kind === "item")
     return {
       kind,
@@ -105,13 +104,28 @@ function fresh(kind: Tab): Draft {
     };
   if (kind === "intel")
     return { kind, title: "", category: "线索", content: "", resolved: false };
-  return { kind, title: "", url: "", caption: "" };
+  if (kind === "achievement")
+    return {
+      kind,
+      title: "",
+      recipient: "团队",
+      description: "",
+      quality: "普通",
+      url: "",
+    };
+  return {
+    kind,
+    title: "",
+    url: "",
+    caption: "",
+    visibility: role === "GM" ? "gm" : "players",
+  };
 }
 function Picture({
   art,
   className = "",
 }: {
-  art: Artwork;
+  art: Pick<Artwork, "url" | "title">;
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
@@ -127,7 +141,11 @@ function Picture({
   ) : (
     <img
       className={className}
-      src={art.url}
+      src={
+        art.url === WELCOME_ACHIEVEMENT.url
+          ? "/achievements/welcome.svg"
+          : art.url
+      }
       alt={art.title}
       loading="lazy"
       referrerPolicy="no-referrer"
@@ -177,14 +195,43 @@ function App() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
-  const lock = useRef(false),
-    fileRef = useRef<HTMLInputElement>(null);
+  const lock = useRef(false);
   useEffect(() => store.subscribe(setState), []);
+  useEffect(() => {
+    setView((previous) =>
+      previous
+        ? (state.entries.find(
+            (entry): entry is Artwork =>
+              entry.kind === "art" && entry.id === previous.id,
+          ) ?? null)
+        : null,
+    );
+    setEditor((previous) =>
+      previous?.previous &&
+      ![...state.entries, ...state.achievements].some(
+        (entry) => entry.id === previous.previous!.id,
+      )
+        ? null
+        : previous,
+    );
+  }, [state.entries, state.achievements]);
+  useEffect(() => {
+    setEditor((previous) =>
+      previous?.draft.kind === "art" || previous?.draft.kind === "achievement"
+        ? null
+        : previous,
+    );
+    setView(null);
+  }, [state.role]);
   useEffect(() => {
     if (!store.demo)
       OBR.onReady(() => {
         void OBR.action.setWidth(760).catch((e) => setError(String(e)));
         void OBR.action.setHeight(700).catch((e) => setError(String(e)));
+        void OBR.action.setTitle("团队手记").catch((e) => setError(String(e)));
+        void OBR.action
+          .setIcon("/icon.svg?v=0.2.0")
+          .catch((e) => setError(String(e)));
       });
   }, []);
   async function run(fn: () => Promise<void>) {
@@ -209,7 +256,10 @@ function App() {
     setError("");
     setNotice("");
   }
-  const entries = state.entries.filter((e) => e.kind === tab);
+  const entries: Entry[] =
+    tab === "achievement"
+      ? state.achievements
+      : state.entries.filter((e) => e.kind === tab);
   const query = search.trim().toLocaleLowerCase();
   const visible = entries.filter((e) => {
     const content =
@@ -217,45 +267,20 @@ function App() {
         ? `${e.title} ${e.holder} ${e.description}`
         : e.kind === "intel"
           ? `${e.title} ${e.content}`
-          : `${e.title} ${e.caption}`;
+          : e.kind === "achievement"
+            ? `${e.title} ${e.recipient} ${e.description} ${e.quality}`
+            : `${e.title} ${e.caption}`;
     return (
       content.toLocaleLowerCase().includes(query) &&
       (filter === "全部" ||
         (e.kind === "intel" && filter === "已整理"
           ? e.resolved
-          : e.kind !== "art" && e.category === filter))
+          : (e.kind === "item" || e.kind === "intel") && e.category === filter))
     );
   });
   const shown = state.entries.find(
     (e): e is Artwork => e.kind === "art" && e.id === state.shownId,
   );
-  async function upload(file: File) {
-    await run(async () => {
-      setNotice(
-        store.demo
-          ? "正在读取图片…"
-          : "请在 Owlbear 完成上传，再从图库选择刚上传的图片。",
-      );
-      const result = await store.upload(file);
-      setNotice("");
-      if (result) setEditor({ draft: { kind: "art", ...result, caption: "" } });
-    });
-  }
-  async function backup() {
-    await run(async () => {
-      const url = URL.createObjectURL(
-        new Blob([await store.backup()], { type: "application/json" }),
-      );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `歪曲之月-团队备份-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setNotice(
-        "已导出团队资料。图库图片保留为引用，原文件仍在 Owlbear 图库中。",
-      );
-    });
-  }
   return (
     <main className="app-shell">
       {store.demo && (
@@ -265,25 +290,22 @@ function App() {
         </div>
       )}
       <header className="app-header">
-        <div className="brand-mark">
-          <Moon size={34} />
-        </div>
-        <div className="brand">
-          <p>THE TWISTED MOON</p>
-          <h1>
-            歪曲之月<span>团队手记</span>
-          </h1>
-        </div>
-        <button
-          className="quiet backup"
-          title="导出团队资料备份"
-          aria-label="导出备份"
-          disabled={busy}
-          onClick={backup}
+        <Book size={20} />
+        <span className="brand-name">团队手记</span>
+        <span
+          className={`room-usage${state.bytes >= 14000 ? " usage-warning" : ""}`}
+          aria-label="共享数据占用"
+          title={
+            state.ready && !state.error
+              ? `${state.bytes.toLocaleString()} B；按整个房间 metadata 的 JSON UTF-8 字节测算，包含其他插件。16 kB = 16,000 B。${store.demo ? "当前为本地演示数据。" : ""}`
+              : "等待成功读取房间共享数据"
+          }
         >
-          <Symbol kind="download" />
-          <span>导出备份</span>
-        </button>
+          {store.demo ? "演示数据" : "房间共享"}{" "}
+          {state.ready && !state.error
+            ? `${(state.bytes / 1000).toFixed(2)} / 16 kB`
+            : "— / 16 kB"}
+        </span>
       </header>
       <nav className="tabs" aria-label="资料分区">
         {(
@@ -291,6 +313,7 @@ function App() {
             ["item", "团队仓库"],
             ["intel", "情报"],
             ["art", "插画"],
+            ["achievement", "成就"],
           ] as const
         ).map(([kind, label]) => (
           <button
@@ -301,7 +324,11 @@ function App() {
           >
             <Symbol kind={kind} />
             {label}
-            <span>{state.entries.filter((e) => e.kind === kind).length}</span>
+            <span>
+              {kind === "achievement"
+                ? state.achievements.length
+                : state.entries.filter((e) => e.kind === kind).length}
+            </span>
           </button>
         ))}
         <div className="shared-label">
@@ -312,7 +339,13 @@ function App() {
       <section
         className="content"
         aria-label={
-          tab === "item" ? "团队仓库" : tab === "intel" ? "情报" : "插画"
+          tab === "item"
+            ? "团队仓库"
+            : tab === "intel"
+              ? "情报"
+              : tab === "achievement"
+                ? "成就"
+                : "插画"
         }
       >
         {(error || state.error) && (
@@ -401,9 +434,9 @@ function App() {
               </>
             ) : (
               <div className="stage-empty">
-                <Moon size={42} />
+                <Book size={42} />
                 <h2>尚未展示插画</h2>
-                <p>上传或选择图片后，点击「展示给全队」。</p>
+                <p>从图库选择或从链接导入后，点击「展示给全队」。</p>
               </div>
             )}
           </section>
@@ -415,14 +448,18 @@ function App() {
                 ? "SHARED INVENTORY"
                 : tab === "intel"
                   ? "FIELD NOTES"
-                  : "ILLUSTRATIONS"}
+                  : tab === "achievement"
+                    ? "PARTY ACHIEVEMENTS"
+                    : "ILLUSTRATIONS"}
             </p>
             <h2>
               {tab === "item"
                 ? "道具与装备"
                 : tab === "intel"
                   ? "我们的发现"
-                  : "插画收藏"}
+                  : tab === "achievement"
+                    ? "我们的成就"
+                    : "插画收藏"}
               <span className="count">{entries.length}</span>
             </h2>
           </div>
@@ -441,7 +478,10 @@ function App() {
                     const image = await store.pick();
                     if (image)
                       setEditor({
-                        draft: { kind: "art", ...image, caption: "" },
+                        draft: {
+                          ...fresh("art", state.role),
+                          ...image,
+                        } as Draft,
                       });
                   })
                 }
@@ -451,33 +491,32 @@ function App() {
               <button
                 className="primary"
                 disabled={busy || !state.ready}
-                onClick={() => fileRef.current?.click()}
+                onClick={() => setEditor({ draft: fresh("art", state.role) })}
               >
-                ＋ 上传插画
+                从链接导入
               </button>
             </div>
-          ) : (
+          ) : tab !== "achievement" || state.role === "GM" ? (
             <button
               className="primary"
               disabled={busy || !state.ready}
               onClick={() => setEditor({ draft: fresh(tab) })}
             >
-              ＋ {tab === "item" ? "添加物品" : "记录情报"}
+              ＋{" "}
+              {tab === "item"
+                ? "添加物品"
+                : tab === "achievement"
+                  ? "添加成就"
+                  : "记录情报"}
             </button>
-          )}
+          ) : null}
         </div>
-        <input
-          ref={fileRef}
-          hidden
-          aria-label="上传插画文件"
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) void upload(file);
-          }}
-        />
+        {tab === "art" && state.role === "GM" && (
+          <p className="gallery-note">
+            仅 DM
+            可见的插画只保存在此账号、此房间的当前浏览器中；清除浏览器数据会丢失记录。改为玩家可见后才会同步给全队。
+          </p>
+        )}
         <div className="filters">
           <label className="search">
             <Symbol kind="search" />
@@ -488,13 +527,15 @@ function App() {
                   ? "搜索物品、保管人…"
                   : tab === "intel"
                     ? "搜索标题或情报内容…"
-                    : "搜索插画…"
+                    : tab === "achievement"
+                      ? "搜索成就、达成人…"
+                      : "搜索插画…"
               }
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
-          {tab !== "art" && (
+          {(tab === "item" || tab === "intel") && (
             <select
               aria-label="筛选分类"
               value={filter}
@@ -508,23 +549,16 @@ function App() {
               ))}
             </select>
           )}
-          {tab === "art" && (
-            <button
-              className="quiet"
-              disabled={busy || !state.ready}
-              onClick={() => setEditor({ draft: fresh("art") })}
-            >
-              添加图片链接
-            </button>
-          )}
         </div>
         <div
           className={
-            tab === "art"
-              ? "gallery"
-              : tab === "intel"
-                ? "intel-grid"
-                : "inventory"
+            tab === "achievement"
+              ? "achievement-list"
+              : tab === "art"
+                ? "gallery"
+                : tab === "intel"
+                  ? "intel-grid"
+                  : "inventory"
           }
         >
           {visible.map((entry) =>
@@ -597,6 +631,38 @@ function App() {
                   {entry.resolved ? "已整理" : "跟进中"}
                 </button>
               </article>
+            ) : entry.kind === "achievement" ? (
+              <article
+                key={entry.id}
+                className={`achievement-card quality-${QUALITIES.indexOf(entry.quality)}`}
+              >
+                <div className="achievement-icon">
+                  <Picture art={entry} />
+                </div>
+                <div className="achievement-copy">
+                  <div className="achievement-title">
+                    <h3>{entry.title}</h3>
+                    <span className="quality-badge">{entry.quality}</span>
+                  </div>
+                  <p>{entry.description}</p>
+                  <span className="achievement-recipient">
+                    {entry.recipient}
+                  </span>
+                </div>
+                {state.role === "GM" && (
+                  <button
+                    className="icon-button achievement-edit"
+                    aria-label={`编辑${entry.title}`}
+                    title="编辑成就"
+                    disabled={busy || !state.ready}
+                    onClick={() =>
+                      setEditor({ draft: { ...entry }, previous: entry })
+                    }
+                  >
+                    <Symbol kind="edit" />
+                  </button>
+                )}
+              </article>
             ) : (
               <article
                 key={entry.id}
@@ -615,12 +681,26 @@ function App() {
                   )}
                 </button>
                 <div className="art-card-content">
+                  <span
+                    className={`visibility-label ${entry.visibility === "gm" ? "private" : ""}`}
+                  >
+                    {entry.visibility === "gm"
+                      ? "仅 DM 可见 · 本机"
+                      : "玩家可见"}
+                  </span>
                   <h3>{entry.title}</h3>
                   {entry.caption && <p>{entry.caption}</p>}
                   <div className="art-actions">
                     <button
                       className="quiet"
-                      disabled={busy || !state.ready}
+                      disabled={
+                        busy || !state.ready || entry.visibility === "gm"
+                      }
+                      title={
+                        entry.visibility === "gm"
+                          ? "先设为玩家可见，再展示给全队"
+                          : undefined
+                      }
                       onClick={() => run(() => store.show(entry.id))}
                     >
                       {state.shownId === entry.id ? "正在展示" : "展示给全队"}
@@ -637,6 +717,29 @@ function App() {
                       <Symbol kind="edit" />
                     </button>
                   </div>
+                  {state.role === "GM" && (
+                    <button
+                      className="visibility-toggle quiet"
+                      disabled={busy || !state.ready}
+                      aria-label={`${entry.visibility === "gm" ? "设为玩家可见" : "设为仅 DM 可见"}：${entry.title}`}
+                      onClick={() =>
+                        run(() =>
+                          store.save(
+                            {
+                              ...entry,
+                              visibility:
+                                entry.visibility === "gm" ? "players" : "gm",
+                            },
+                            entry,
+                          ),
+                        )
+                      }
+                    >
+                      {entry.visibility === "gm"
+                        ? "设为玩家可见"
+                        : "设为仅 DM 可见"}
+                    </button>
+                  )}
                 </div>
               </article>
             ),
@@ -652,12 +755,16 @@ function App() {
                   ? "团队仓库还是空的"
                   : tab === "intel"
                     ? "等待第一条发现"
-                    : "收藏第一张旅途插画"}
+                    : tab === "achievement"
+                      ? "下一段旅程，新的成就"
+                      : "收藏第一张旅途插画"}
             </h3>
             <p>
               {query || filter !== "全部"
                 ? "试试其他关键词或分类。"
-                : "玩家和 DM 都可以添加和编辑。"}
+                : tab === "achievement"
+                  ? "由 DM 记录成就，所有人都能看到。"
+                  : "玩家和 DM 都可以添加和编辑。"}
             </p>
           </div>
         )}
@@ -671,7 +778,11 @@ function App() {
               : "已连接房间资料"
             : "等待连接"}
         </span>
-        <span>玩家 · DM 均可编辑</span>
+        <span>
+          {tab === "achievement"
+            ? "仅 DM 可编辑 · 全队可见"
+            : "玩家 · DM 均可编辑"}
+        </span>
       </footer>
       {editor && (
         <Modal
@@ -685,6 +796,7 @@ function App() {
           }}
         >
           <EntryEditor
+            isGM={state.role === "GM"}
             editor={editor}
             busy={busy}
             error={error}
@@ -761,6 +873,7 @@ function App() {
   );
 }
 function EntryEditor({
+  isGM,
   editor,
   busy,
   error,
@@ -768,6 +881,7 @@ function EntryEditor({
   onSave,
   onDelete,
 }: {
+  isGM: boolean;
   editor: Editor;
   busy: boolean;
   error: string;
@@ -780,7 +894,13 @@ function EntryEditor({
   const update = (key: string, value: string | number | boolean) =>
     setDraft((previous) => ({ ...previous, [key]: value }) as Draft);
   const label =
-    draft.kind === "item" ? "物品" : draft.kind === "intel" ? "情报" : "插画";
+    draft.kind === "item"
+      ? "物品"
+      : draft.kind === "intel"
+        ? "情报"
+        : draft.kind === "achievement"
+          ? "成就"
+          : "插画";
   return (
     <form
       onSubmit={(e) => {
@@ -802,7 +922,11 @@ function EntryEditor({
       )}
       <fieldset disabled={busy}>
         <label>
-          {draft.kind === "item" ? "名称" : "标题"}
+          {draft.kind === "item"
+            ? "名称"
+            : draft.kind === "achievement"
+              ? "成就名"
+              : "标题"}
           <input
             autoFocus
             required
@@ -906,6 +1030,19 @@ function EntryEditor({
         )}
         {draft.kind === "art" && (
           <>
+            {isGM && (
+              <label>
+                插画可见性
+                <select
+                  aria-label="插画可见性"
+                  value={draft.visibility ?? "players"}
+                  onChange={(e) => update("visibility", e.target.value)}
+                >
+                  <option value="gm">仅 DM 可见（当前浏览器）</option>
+                  <option value="players">玩家可见（房间共享）</option>
+                </select>
+              </label>
+            )}
             <label>
               图片地址
               <input
@@ -941,13 +1078,67 @@ function EntryEditor({
             </label>
           </>
         )}
+        {draft.kind === "achievement" && (
+          <>
+            <div className="form-row">
+              <label>
+                达成人
+                <input
+                  required
+                  maxLength={120}
+                  value={draft.recipient}
+                  onChange={(e) => update("recipient", e.target.value)}
+                />
+              </label>
+              <label>
+                品质
+                <select
+                  aria-label="品质"
+                  value={draft.quality}
+                  onChange={(e) => update("quality", e.target.value)}
+                >
+                  {QUALITIES.map((quality) => (
+                    <option key={quality}>{quality}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label>
+              描述
+              <textarea
+                aria-label="描述"
+                required
+                rows={3}
+                maxLength={1000}
+                value={draft.description}
+                onChange={(e) => update("description", e.target.value)}
+              />
+            </label>
+            <label>
+              配图链接
+              <input
+                aria-label="配图链接"
+                required
+                type="url"
+                value={draft.url}
+                onChange={(e) => update("url", e.target.value)}
+                placeholder="https://…"
+              />
+            </label>
+            {draft.url && (
+              <div className="achievement-preview">
+                <Picture art={draft} />
+              </div>
+            )}
+          </>
+        )}
         {confirm && (
           <div className="delete-confirm">
             <p>
               确认移除「{editor.previous?.title}」？
               {draft.kind === "art"
                 ? "原图库图片会保留。"
-                : "需要保留时，可先取消并导出备份。"}
+                : "需要保留时，请先取消。"}
             </p>
             <button
               type="button"

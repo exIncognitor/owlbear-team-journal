@@ -68,20 +68,23 @@ test("intelligence supports multiline notes, search, resolved status and cancell
   ).toBeVisible();
 });
 
-test("uploaded artwork persists locally, can be presented and viewed, and removal clears presentation", async ({
+test("linked artwork persists locally, can be presented and viewed, and removal clears presentation", async ({
   page,
 }) => {
   await page.goto("/panel.html");
   const image = await page.screenshot({
     clip: { x: 0, y: 0, width: 64, height: 64 },
   });
+  await page.route("https://images.example.org/journey.png", (route) =>
+    route.fulfill({ contentType: "image/png", body: image }),
+  );
   await page.getByRole("button", { name: /^插画/ }).click();
-  await page.getByLabel("上传插画文件").setInputFiles({
-    name: "月下旅途.png",
-    mimeType: "image/png",
-    buffer: image,
-  });
+  await page.getByRole("button", { name: "从链接导入", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "添加资料" })).toBeVisible();
+  await page.getByLabel("插画可见性", { exact: true }).selectOption("players");
+  await page
+    .getByLabel("图片地址", { exact: true })
+    .fill("https://images.example.org/journey.png");
   await page.getByLabel("标题", { exact: true }).fill("月下旅途");
   await page.getByLabel("插画说明", { exact: true }).fill("我们的第一幅插画。");
   await page.getByRole("button", { name: "保存", exact: true }).click();
@@ -146,7 +149,7 @@ for (const width of [390, 760])
       "background-color",
       "rgb(11, 12, 17)",
     );
-    for (const name of [/^团队仓库/, /^情报/, /^插画/]) {
+    for (const name of [/^团队仓库/, /^情报/, /^插画/, /^成就/]) {
       await page.getByRole("button", { name }).click();
       expect(
         await page.evaluate(
@@ -165,16 +168,56 @@ for (const width of [390, 760])
     await page.screenshot({ path: `qa/panel-${width}.png` });
   });
 
-test("export preserves owned records and the moon manifest uses native action", async ({
+for (const width of [390, 760])
+  test(`text-first achievement banners at ${width}px have a small illustration and no field labels`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto("/panel.html");
+    await page.getByRole("button", { name: /^成就/ }).click();
+    const card = page.locator(".achievement-card");
+    await expect(card).toContainText("欢迎来到德鲁斯肯瓦尔德");
+    await expect(card).toContainText("团队");
+    await expect(card).toContainText("来到德鲁斯肯瓦尔德");
+    await expect(card).toContainText("普通");
+    await expect(card).not.toContainText(/成就名|达成人|描述|品质/);
+    await expect
+      .poll(() =>
+        card
+          .locator("img")
+          .evaluate((image) => (image as HTMLImageElement).naturalWidth),
+      )
+      .toBeGreaterThan(0);
+    const cardBox = await card.boundingBox(),
+      iconBox = await card.locator(".achievement-icon").boundingBox();
+    expect(iconBox!.width).toBeLessThan(cardBox!.width / 4);
+    expect(cardBox!.width / cardBox!.height).toBeGreaterThan(2.3);
+    await page.screenshot({ path: `qa/achievements-${width}.png` });
+  });
+
+test("compact journal header and book manifest keep the native action and only two artwork import methods", async ({
   page,
 }) => {
   await page.goto("/panel.html");
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "导出备份", exact: true }).click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toContain("歪曲之月-团队备份");
+  await expect(page.locator(".app-header")).toContainText("团队手记");
+  expect(
+    (await page.locator(".app-header").boundingBox())!.height,
+  ).toBeLessThanOrEqual(42);
+  await expect(page.locator(".app-header h1")).toHaveCount(0);
+  await expect(page.getByLabel("共享数据占用")).toContainText("演示数据");
+  await expect(page.getByRole("button", { name: "导出备份" })).toHaveCount(0);
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
+  await page.getByRole("button", { name: /^插画/ }).click();
+  await expect(page.locator(".list-heading .actions button")).toHaveText([
+    "从图库选择",
+    "从链接导入",
+  ]);
   const manifest = await (await page.request.get("/manifest.json")).json();
+  expect(manifest.name).toBe("团队手记");
+  expect(manifest.version).toBe("0.2.0");
   expect(manifest.action).toMatchObject({
+    title: "团队手记",
+    icon: "/icon.svg?v=0.2.0",
     popover: "/panel.html",
     width: 760,
     height: 700,

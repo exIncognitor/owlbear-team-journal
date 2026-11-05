@@ -6,15 +6,15 @@
     <meta name="theme-color" content="#0b0c11" />
     <meta
       name="description"
-      content="歪曲之月团队手记：在 Owlbear Rodeo 中共享金钱、道具、装备、情报与插画。"
+      content="团队手记：在 Owlbear Rodeo 中共享金钱、道具、装备、情报、插画与成就。"
     />
-    <title>歪曲之月 · 团队手记</title>
+    <title>团队手记</title>
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="stylesheet" href="/src/landing.css" />
   </head>
   <body>
     <nav class="site-nav">
-      <a href="#" class="wordmark"><img src="/icon.svg" alt="" />歪曲之月</a
+      <a href="#" class="wordmark"><img src="/icon.svg" alt="" />团队手记</a
       ><a href="#preview">体验面板</a
       ><a
         href="https://github.com/exIncognitor/owlbear-twisted-moon"
@@ -36,16 +36,16 @@
               >安装到 Owlbear <span>↗</span></a
             ><a class="button secondary" href="/panel.html">打开独立演示</a>
           </div>
-          <p class="fine">宽版黑底面板 · 月亮图标 · 玩家与 DM 共同编辑</p>
+          <p class="fine">宽版黑底面板 · 书本图标 · 玩家与 DM 共同编辑</p>
         </div>
-        <div class="moon-art" aria-hidden="true">
+        <div class="book-art" aria-hidden="true">
           <div class="orbit orbit-one"></div>
           <div class="orbit orbit-two"></div>
-          <div class="orb"></div>
+          <img class="journal-art" src="/icon.svg" alt="" />
           <span class="star s1">✦</span><span class="star s2">✦</span
           ><span class="star s3">·</span>
-          <div class="moon-label">
-            THE TWISTED MOON<br /><span>A SHARED JOURNAL</span>
+          <div class="book-label">
+            THE PARTY JOURNAL<br /><span>OUR STORIES, TOGETHER</span>
           </div>
         </div>
       </section>
@@ -64,8 +64,13 @@
           <span>03 / GALLERY</span>
           <h2>故事，也值得被看见。</h2>
           <p>
-            上传插画、选择图库图片，设置当前展示，让队友在面板中看到同一幅画。
+            从图库选择、从链接导入图片，设置当前展示，让队友在面板中看到同一幅画。
           </p>
+        </article>
+        <article>
+          <span>04 / ACHIEVEMENTS</span>
+          <h2>每次抵达，都值得记住。</h2>
+          <p>DM 记录成就与配图，长条卡片呈现团队的里程碑，全队可见。</p>
         </article>
       </section>
       <section id="preview" class="preview-section">
@@ -78,7 +83,7 @@
         </div>
         <div class="browser-frame">
           <div class="frame-bar">
-            <i></i><i></i><i></i><span>歪曲之月 · 团队手记</span>
+            <i></i><i></i><i></i><span>团队手记</span>
           </div>
           <iframe
             src="/panel.html"
@@ -89,9 +94,9 @@
       </section>
       <section id="install" class="install-section">
         <p class="eyebrow">BRING YOUR PARTY TOGETHER</p>
-        <h2>一轮新月，一本新手记。</h2>
+        <h2>翻开你们的团队手记。</h2>
         <p>
-          复制安装链接，在 Owlbear 的扩展设置中添加并启用到房间。<br />点击月亮图标打开，再次点击关闭。
+          复制安装链接，在 Owlbear 的扩展设置中添加并启用到房间。<br />点击书本图标打开，再次点击关闭。
         </p>
         <div class="install-link">
           <code id="install-url"></code
@@ -100,12 +105,13 @@
         <p id="copy-status" role="status"></p>
         <div class="install-notes">
           <p>
-            资料按房间共享，切换场景也保留。玩家与 DM
-            均可编辑，所有内容对房间成员可见。
+            资料按房间共享，切换场景也保留。玩家与 DM 均可编辑公开资料。DM
+            可设置插画可见性；仅 DM
+            可见的记录保存在当前浏览器，清除浏览器数据会丢失。
           </p>
           <p>
             图片通过 Owlbear
-            图库上传和选择，使用上传者的图库配额；房间只保存引用。共享文字容量受
+            图库选择，或从公开图片链接导入；房间只保存引用。顶栏显示整个房间共享数据占用。共享文字容量受
             Owlbear 房间限制，超出时会阻止保存。图片原件请自行保留。
           </p>
           <p>真实房间联测尚未完成；本地测试与发布核对不代替房间验收。</p>
@@ -113,8 +119,7 @@
       </section>
     </main>
     <footer>
-      <span>歪曲之月 · 团队手记</span
-      ><span>Made for the stories you share.</span>
+      <span>团队手记</span><span>Made for the stories you share.</span>
     </footer>
     <script type="module" src="/src/landing.ts"></script>
   </body>

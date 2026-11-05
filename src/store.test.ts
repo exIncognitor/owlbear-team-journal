@@ -8,17 +8,20 @@ vi.mock("@owlbear-rodeo/sdk", () => ({
     isAvailable: true,
     assets: { uploadImages: assets.upload, downloadImages: assets.pick },
   },
-  buildImageUpload: (file: File) => ({ build: () => ({ file }) }),
 }));
-import { TeamStore, type Driver } from "./store";
+import { TeamStore, type Driver, type Identity } from "./store";
+import type { PrivateArtVault } from "./private-art";
 import {
   COINS,
+  ACHIEVEMENT_PREFIX,
+  WELCOME_ACHIEVEMENT,
   DISPLAY_KEY,
   RECORD_PREFIX,
   moneyKey,
   type Draft,
   type Entry,
   type Metadata,
+  type Artwork,
 } from "./model";
 function hub(initial: Metadata = {}) {
   let metadata = initial;
@@ -216,7 +219,7 @@ it("does not retain a subscription after unmounting before readiness", async () 
   await Promise.resolve();
   expect(listen).not.toHaveBeenCalled();
 });
-it("uploads through the official assets API and selects an actual persistent URL", async () => {
+it("opens the official gallery directly without uploading a local file", async () => {
   assets.pick.mockResolvedValueOnce([
     {
       name: "月下风景",
@@ -225,14 +228,30 @@ it("uploads through the official assets API and selects an actual persistent URL
   ]);
   const room = hub(),
     store = new TeamStore(room.driver);
-  const file = new File(["image"], "moon.png", { type: "image/png" });
-  expect(await store.upload(file)).toEqual({
+  expect(await store.pick()).toEqual({
     title: "月下风景",
     url: "https://images.example.org/uploaded.webp",
   });
-  expect(assets.upload).toHaveBeenCalledOnce();
-  expect(assets.pick).toHaveBeenCalledWith(false, "moon", "PROP");
+  expect(assets.upload).not.toHaveBeenCalled();
+  expect(assets.pick).toHaveBeenCalledWith(false, "");
   expect(room.write).not.toHaveBeenCalled();
+});
+it("reports all room metadata as UTF-8 bytes and updates when another plugin writes", async () => {
+  const room = hub({ "another.plugin": { note: "中文内容🌙" } });
+  const store = new TeamStore(room.driver);
+  const stop = await connect(store);
+  const size = () =>
+    new TextEncoder().encode(JSON.stringify(room.get())).byteLength;
+  expect(store.state.bytes).toBe(size());
+  expect(store.state.bytes).toBeGreaterThan(JSON.stringify(room.get()).length);
+  await store.save(item);
+  expect(store.state.bytes).toBe(size());
+  room.push({
+    ...room.get(),
+    "another.plugin": { note: "更长的共享资料".repeat(30) },
+  });
+  await vi.waitFor(() => expect(store.state.bytes).toBe(size()));
+  stop();
 });
 it("does not create a fake gallery entry when asset selection is cancelled", async () => {
   const room = hub(),
@@ -254,4 +273,186 @@ it("prevents binary/data URLs from entering real room storage", async () => {
   ).toThrow();
   expect(room.write).not.toHaveBeenCalled();
   stop();
+});
+
+function privateRoom(initial: Metadata = {}) {
+  const room = hub(initial);
+  let role: Identity["role"] = "GM";
+  let changed: ((identity: Identity) => void) | undefined;
+  const identity = async (): Promise<Identity> => ({
+    role,
+    roomId: "test-room",
+    playerId: "dm",
+  });
+  const driver: Driver = {
+    ...room.driver,
+    identity,
+    listenIdentity: (fn) => {
+      changed = fn;
+      return () => {
+        changed = undefined;
+      };
+    },
+  };
+  let records: Artwork[] = [];
+  const vault: PrivateArtVault = {
+    read: () => structuredClone(records),
+    write: (entries) => {
+      records = structuredClone(entries);
+    },
+    listen: () => () => {},
+  };
+  const gm = new TeamStore(driver, false, () => vault);
+  return {
+    room,
+    gm,
+    vault,
+    demote: () => {
+      role = "PLAYER";
+      void identity().then((value) => changed?.(value));
+    },
+  };
+}
+const privateArt: Draft = {
+  kind: "art",
+  title: "尚未揭晓的地点",
+  url: "https://images.example.org/secret.png",
+  caption: "DM 专用说明",
+  visibility: "gm",
+};
+
+it("keeps private artwork entirely out of shared metadata and rejects player/private presentation writes", async () => {
+  const { room, gm, vault } = privateRoom();
+  const player = new TeamStore(room.driver);
+  const stop1 = await connect(gm),
+    stop2 = await connect(player);
+  await gm.save(privateArt);
+  expect(vault.read()).toHaveLength(1);
+  expect(gm.state.entries).toHaveLength(1);
+  expect(player.state.entries).toHaveLength(0);
+  expect(room.write).not.toHaveBeenCalled();
+  expect(JSON.stringify(room.get())).not.toContain("secret.png");
+  await expect(gm.show(gm.state.entries[0].id)).rejects.toThrow(
+    "先将插画设为玩家可见",
+  );
+  await expect(player.save(privateArt)).rejects.toThrow("只有 DM");
+  stop1();
+  stop2();
+});
+it("publishes private artwork and hides it again, clearing the shared presentation", async () => {
+  const { room, gm, vault } = privateRoom();
+  const player = new TeamStore(room.driver);
+  const stop1 = await connect(gm),
+    stop2 = await connect(player);
+  await gm.save(privateArt);
+  let art = gm.state.entries[0] as Artwork;
+  await gm.save({ ...art, visibility: "players" }, art);
+  art = gm.state.entries[0] as Artwork;
+  await vi.waitFor(() => expect(player.state.entries).toHaveLength(1));
+  expect(vault.read()).toHaveLength(0);
+  await gm.show(art.id);
+  await gm.save({ ...art, visibility: "gm" }, art);
+  await vi.waitFor(() => expect(player.state.entries).toHaveLength(0));
+  expect(player.state.shownId).toBeNull();
+  expect(vault.read()).toHaveLength(1);
+  expect(JSON.stringify(room.get())).not.toContain("secret.png");
+  stop1();
+  stop2();
+});
+it("retains a private copy when a hide fails and keeps the still-shared record marked public", async () => {
+  const { room, gm, vault } = privateRoom();
+  const stop = await connect(gm);
+  await gm.save({ ...privateArt, visibility: "players" });
+  const art = gm.state.entries[0] as Artwork;
+  room.write.mockRejectedValueOnce(Error("offline"));
+  await expect(gm.save({ ...art, visibility: "gm" }, art)).rejects.toThrow(
+    "offline",
+  );
+  expect((gm.state.entries[0] as Artwork).visibility).toBe("players");
+  expect(vault.read()).toHaveLength(1);
+  expect(JSON.stringify(room.get())).toContain("secret.png");
+  // Re-read after an unacknowledged write really reached the room: private copy survives.
+  room.push({ [RECORD_PREFIX + art.id]: null });
+  await vi.waitFor(() =>
+    expect((gm.state.entries[0] as Artwork).visibility).toBe("gm"),
+  );
+  stop();
+});
+it("never removes a shared image if local storage fails, or a private image when publication exceeds quota", async () => {
+  const { room, gm, vault } = privateRoom();
+  const stop = await connect(gm);
+  await gm.save({ ...privateArt, visibility: "players" });
+  const art = gm.state.entries[0] as Artwork;
+  const write = vi.spyOn(vault, "write").mockImplementationOnce(() => {
+    throw Error("local full");
+  });
+  room.write.mockClear();
+  await expect(gm.save({ ...art, visibility: "gm" }, art)).rejects.toThrow(
+    "local full",
+  );
+  expect(room.write).not.toHaveBeenCalled();
+  write.mockRestore();
+  await gm.save({ ...art, visibility: "gm" }, art);
+  room.push({ ...room.get(), other: "x".repeat(15480) });
+  await vi.waitFor(() => expect(gm.state.bytes).toBeGreaterThan(15480));
+  const hidden = gm.state.entries[0] as Artwork;
+  await expect(
+    gm.save({ ...hidden, visibility: "players" }, hidden),
+  ).rejects.toThrow("空间不足");
+  expect(vault.read()).toHaveLength(1);
+  expect((gm.state.entries[0] as Artwork).visibility).toBe("gm");
+  stop();
+});
+it("drops private records on demotion and rejects an old GM editor without deleting local data", async () => {
+  const { gm, vault, demote } = privateRoom();
+  const stop = await connect(gm);
+  await gm.save(privateArt);
+  const stale = gm.state.entries[0] as Artwork;
+  demote();
+  await vi.waitFor(() => expect(gm.state.role).toBe("PLAYER"));
+  expect(gm.state.entries).toHaveLength(0);
+  await expect(
+    gm.save({ ...stale, visibility: "players" }, stale),
+  ).rejects.toThrow("队友修改或移除");
+  expect(vault.read()).toHaveLength(1);
+  stop();
+});
+
+it("shows the welcome achievement to everyone without writing, and only permits the GM to edit or remove it", async () => {
+  const { room, gm } = privateRoom();
+  const player = new TeamStore(room.driver);
+  const stop1 = await connect(gm),
+    stop2 = await connect(player);
+  expect(player.state.achievements).toEqual([WELCOME_ACHIEVEMENT]);
+  expect(room.write).not.toHaveBeenCalled();
+  await expect(
+    player.save(
+      { ...WELCOME_ACHIEVEMENT, description: "篡改" },
+      WELCOME_ACHIEVEMENT,
+    ),
+  ).rejects.toThrow("只有 DM");
+  await expect(player.remove(WELCOME_ACHIEVEMENT)).rejects.toThrow("只有 DM");
+  // Changing the client-supplied kind cannot bypass the achievement guard.
+  await expect(player.save(item, WELCOME_ACHIEVEMENT)).rejects.toThrow(
+    "只有 DM",
+  );
+  await gm.save(
+    {
+      ...WELCOME_ACHIEVEMENT,
+      description: "团队抵达了新的旅程",
+      quality: "稀有",
+    },
+    WELCOME_ACHIEVEMENT,
+  );
+  await vi.waitFor(() =>
+    expect(player.state.achievements[0].quality).toBe("稀有"),
+  );
+  expect(player.state.achievements[0].description).toBe("团队抵达了新的旅程");
+  await gm.remove(gm.state.achievements[0]);
+  await vi.waitFor(() => expect(player.state.achievements).toHaveLength(0));
+  expect(room.get()[ACHIEVEMENT_PREFIX + WELCOME_ACHIEVEMENT.id]).toBeNull();
+  await player.refresh();
+  expect(player.state.achievements).toHaveLength(0);
+  stop1();
+  stop2();
 });
