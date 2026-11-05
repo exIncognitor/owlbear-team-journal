@@ -8,7 +8,14 @@
 - 安装地址：https://owlbear-twisted-moon.pages.dev/manifest.json
 - 原生 Action 入口：/panel.html，760 × 700，黑色背景。
 
-当前发布状态将在上传并逐项核对后记录。创建免费 Direct Upload 项目，上传 dist 根目录内容的版本 ZIP；不上传源码、node_modules、qa、history、备份、图片原件或凭据。没有 Git 自动部署，推送 GitHub 后仍须单独发布构建。
+已于 2026-11-05 在独立的免费 Direct Upload 项目发布 v0.1.0。Cloudflare 返回 Success，生产 9 个可访问静态文件的 SHA-256 与本地构建逐项一致；第 10 个文件 _headers 由实际响应头验证。manifest 为 JSON、CORS 为 *、no-cache、CSP 允许 Owlbear、没有 X-Frame-Options，/panel.html 规范化至 /panel 并保留 obrref。浏览器已实际打开生产面板，显示本地演示与正确的三个分区。
+
+- 产品源码提交与首次恢复点：57e2de6889fcda4753ad6a2e2cf85b09c619875b。
+- 部署包：项目根目录 DEPLOY-READY-v0.1.0.zip，仅 dist 根目录 10 个文件。
+- ZIP SHA-256：3e8fe2ee45684395bace190b67ba0d0021487acff2c8008b3e1627cea6fb4950。
+- 本地发布页面凭证：qa/deploy-success.png。此截图与其他 QA 文件不上传仓库或部署。
+
+没有上传源码、node_modules、qa、history、备份、图片原件或凭据。没有 Git 自动部署，推送 GitHub 后仍须单独发布构建；后续纯文档提交不改变此次线上构建。
 
 ## 构建与更新
 

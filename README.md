@@ -2,7 +2,11 @@
 
 独立的 Owlbear Rodeo 资料插件。月亮图标、760 × 700 原生黑底面板，玩家与 DM 均可编辑。与战斗序列插件使用不同仓库、站点与数据命名空间。
 
-目标安装地址：https://owlbear-twisted-moon.pages.dev/manifest.json
+安装地址（已发布 v0.1.0）：https://owlbear-twisted-moon.pages.dev/manifest.json
+
+产品主页：https://owlbear-twisted-moon.pages.dev/ · 独立演示：https://owlbear-twisted-moon.pages.dev/panel.html
+
+源码：https://github.com/exIncognitor/owlbear-twisted-moon
 
 ## 功能
 
