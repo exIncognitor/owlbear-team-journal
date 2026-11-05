@@ -1,0 +1,16 @@
+{
+  "name": "歪曲之月 · 团队手记",
+  "version": "0.1.0",
+  "manifest_version": 1,
+  "description": "共享团队仓库、金钱、情报和插画，玩家与 DM 均可编辑。",
+  "author": "Twisted Moon",
+  "icon": "/icon.svg?v=0.1.0",
+  "homepage_url": "https://owlbear-twisted-moon.pages.dev/",
+  "action": {
+    "title": "歪曲之月",
+    "icon": "/icon.svg?v=0.1.0",
+    "popover": "/panel.html",
+    "width": 760,
+    "height": 700
+  }
+}

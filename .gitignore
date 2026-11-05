@@ -1,0 +1,15 @@
+node_modules/
+dist/
+qa/
+test-results/
+playwright-report/
+coverage/
+.codex-tmp/
+history/
+*.zip
+*.log
+.env
+.env.*
+!.env.example
+.wrangler/
+.DS_Store

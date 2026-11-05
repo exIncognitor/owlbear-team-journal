@@ -1,0 +1,15 @@
+/*
+  Access-Control-Allow-Origin: *
+  Content-Security-Policy: frame-ancestors 'self' https://www.owlbear.rodeo https://owlbear.rodeo
+  ! X-Frame-Options
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+
+/manifest.json
+  Cache-Control: no-cache
+
+/panel
+  Cache-Control: no-cache
+
+/panel.html
+  Cache-Control: no-cache
