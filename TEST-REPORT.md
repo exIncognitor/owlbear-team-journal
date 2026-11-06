@@ -9,7 +9,9 @@
 - 47 项逻辑/真实本地 D1 测试通过。新增空白搜索词省略及非空搜索词保留回归，错误对象使用实际宿主的嵌套格式。
 - 14 组浏览器回归通过，模拟宿主增加真实空字符串拒绝校验，继续覆盖图库失败、取消、重试和跨房间成就隔离。TypeScript、Vite、Worker 构建及 diff 检查通过。
 - 发布包 `DEPLOY-READY-v0.3.3.zip` 包含 13 个文件，SHA-256 为 `6f5ec7e0a4a551e7a191c093a33004e9acb97f2448abb5917c1c10c01ff83365`。构建不含管理私钥，公钥与原连接配置匹配。
-- 目前等待用户在 Chrome 完成 Cloudflare 登录，发布后需验证真实图库打开、选择及取消，以及空房间成就计数。生产状态见 DEPLOY.md。
+- 已用 Chrome 完成原 Pages 项目的生产发布，线上清单确认为 0.3.3；10 个公开静态文件的线上哈希与最终构建一致，实际缓存、CORS、嵌入策略及 `obrref` 跳转保留通过。证据为 `qa/v0.3.3/deploy-success.jpg` 和 `production-verification.json`。生产状态见 DEPLOY.md。
+- 刷新真实 `The Bent Flair` 房间后，成就计数为 0，成就页显示空态。点击“从图库选择”正常打开 Owlbear 官方 Select Image 窗口；选中已有图片“02”后，编辑器正确获得标题、图片 URL 和预览。取消编辑后插画仍为 0；再次打开图库，在搜索框按 Escape 取消，面板恢复可用且无错误，共享占用仍为 0.00 kB。证据为 `room-empty-achievements.jpg`、`room-gallery-success.jpg` 和 `room-gallery-selected.jpg`。
+- 本次真实平台只验证上述流程，跨房间成就隔离由本地三客户端自动化覆盖。实际选图未保存为房间记录，未修改生产 D1 业务资料。浏览器曾在对 dialog 容器发送 Escape 时超时，改用新调试标签并在图库搜索框发送 Escape 后取消成功。
 
 ## v0.3.2 图库兼容与空房间成就 · 2026-11-06
 

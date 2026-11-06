@@ -1,11 +1,14 @@
 # Cloudflare Pages 部署
 
-## 待发布 · v0.3.3 · 2026-11-06
+## 当前发布 · v0.3.3 · 2026-11-06
 
 - Chrome 真实房间已复现图库错误并取得宿主原因，修复空 `defaultSearch` 参数，同时包含空房间默认成就修复。
 - 发布包 `DEPLOY-READY-v0.3.3.zip`，13 文件，SHA-256 为 `6f5ec7e0a4a551e7a191c093a33004e9acb97f2448abb5917c1c10c01ff83365`。47 项逻辑/D1、14 组浏览器回归与构建通过，管理私钥排除检查通过。
-- Chrome 已打开原项目的登录页面，等待用户完成原 Cloudflare 账号登录。当前公开清单实测仍为 v0.3.1，v0.3.2 候选从未上传。
-- 本次恢复起点为 `68974bdfb1eedc2d0064220e71480f7b33754e9e`。发布后继续使用原安装地址。
+- 用户完成 Cloudflare 登录并开启 Chrome 扩展文件上传权限后，在原 Pages 项目执行 Production Direct Upload，13/13 文件上传成功，Cloudflare 显示 Success。线上清单 HTTP 200，版本为 0.3.3。v0.3.2 候选未上传。
+- 10 个公开静态文件的线上 SHA-256 全部与本地构建一致。实际响应包含 JSON 类型、`Access-Control-Allow-Origin: *`、`Cache-Control: no-cache` 和允许 Owlbear 的嵌入 CSP，无 `X-Frame-Options`。`/panel.html?obrref=verification-v033` 跳转至 `/panel` 并保留参数。验证记录保存在 `qa/v0.3.3/production-verification.json`。
+- Chrome 真实房间 `The Bent Flair` 中，空房间显示成就 0；官方图库正常打开，选图后标题、URL 与预览进入插画编辑器。取消编辑和按 Escape 取消图库均恢复可用面板，插画仍为 0，共享占用仍为 0.00 kB。
+- 本次恢复起点为 `68974bdfb1eedc2d0064220e71480f7b33754e9e`，修复代码提交为 `b709148`。继续使用原安装地址 https://owlbear-twisted-moon.pages.dev/manifest.json ，房间全页刷新后加载新版。
+- 发布与真实房间凭证保存在 `qa/v0.3.3/deploy-success.jpg`、`room-empty-achievements.jpg`、`room-gallery-success.jpg` 和 `room-gallery-selected.jpg`。截图、ZIP 和核对 JSON 仅本地保留。
 
 ## 发布候选 · v0.3.2 · 2026-11-06
 
@@ -14,7 +17,7 @@
 - 当前尚未上传 Cloudflare。浏览器连接读取现有标签连续超时；`wrangler whoami` 返回未登录。生产仍为下述 v0.3.1，不能把本地版本号视为线上已更新。
 - 任务 Git 恢复点：`5c40683e9abb43b09c52f676fdd78274f7f11b1a`。上传成功后沿用原安装链接；发布前用户房间不会自动获得本地修正。
 
-## 当前发布 · 团队手记 v0.3.1 · 2026-11-05
+## 历史发布 · 团队手记 v0.3.1 · 2026-11-05
 
 - 在原 Pages 项目 `owlbear-twisted-moon` 完成 Production Direct Upload，13/13 文件上传成功并显示 Success。安装地址仍为 https://owlbear-twisted-moon.pages.dev/manifest.json ，浏览器读取清单确认版本 0.3.1。
 - 云端隐藏插画使用独立 D1 表 `journal_private_art` 与签名管理接口；共享模式保留原 DM 本机记录。复用现有 `DB` 绑定和管理公钥，新增表不清空原业务数据。
@@ -78,4 +81,4 @@
 5. 验证 manifest JSON、书本图标、CORS、no-cache、frame-ancestors 允许 Owlbear、无 X-Frame-Options，确认 /panel.html 规范化跳转保留 obrref；受阻时如实记录未完成项。
 6. 用户添加 manifest 到房间；后续更新刷新整个房间，无需更换安装链接。
 
-真实平台验收由用户进行：原生图标开关、宽面板尺寸、双方编辑和同步、图库直接选择、DM 私密/公开切换、成就仅 DM 编辑/全员可见、插画展示、切换场景与重连。自动化模拟不等同于真实房间测试。
+本次 Chrome 真实房间验证范围为官方图库打开、选图返回、取消，以及空房间成就。双方编辑和同步、DM 私密/公开切换、成就角色权限、插画展示、切换场景与重连继续由自动化回归覆盖，并由用户进行后续真实联机验收。
