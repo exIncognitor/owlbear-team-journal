@@ -1,91 +1,169 @@
-# 团队手记
+<h1 align="center">📖 团队手记</h1>
 
-Owlbear Rodeo 资料插件：书本图标、760 × 700 原生黑底面板，玩家与 DM 均可编辑公开资料。沿用原来的站点与数据命名空间，更新不清空现有房间资料。
+<p align="center">Owlbear Rodeo 团队资料插件 · Team Journal</p>
 
-- 安装链接：https://owlbear-twisted-moon.pages.dev/manifest.json
-- 产品主页：https://owlbear-twisted-moon.pages.dev/
-- 独立演示：https://owlbear-twisted-moon.pages.dev/panel.html
-- 源码：https://github.com/exIncognitor/owlbear-twisted-moon
+<p align="center">
+  <a href="https://owlbear-twisted-moon.pages.dev/manifest.json"><img alt="Version 0.3.3" src="https://img.shields.io/badge/version-0.3.3-d9bf83" /></a>
+  <a href="https://www.owlbear.rodeo/"><img alt="Owlbear Rodeo extension" src="https://img.shields.io/badge/Owlbear_Rodeo-extension-8b75bb" /></a>
+  <a href="https://www.typescriptlang.org/"><img alt="React and TypeScript" src="https://img.shields.io/badge/React_19-TypeScript-3178c6" /></a>
+</p>
 
-## v0.3.3 图库空搜索参数与空房间成就
+<p align="center">
+  <a href="https://owlbear-twisted-moon.pages.dev/">产品主页</a> ·
+  <a href="https://owlbear-twisted-moon.pages.dev/panel.html">打开演示</a> ·
+  <a href="#快速安装">安装指南</a> ·
+  <a href="https://github.com/exIncognitor/owlbear-team-journal/issues">问题反馈</a>
+</p>
 
-真实房间不再自动显示内置欢迎成就；只读取实际保存的记录，已有成就不删除。独立演示保留欢迎示例。复制资料只复制实际存储内容。
+在 Owlbear 房间里共同整理团队金钱、道具装备、调查情报、旅途插画与成就。点击书本图标展开 760 × 700 黑底面板，玩家和 DM 共同编辑公开资料，DM 管理私密插画和团队成就。
 
-Chrome 真实房间调试已确认，图库打不开的原因为宿主拒绝空字符串 `defaultSearch`。现在未输入搜索词时省略该参数，有搜索词时去除首尾空白后传入。选择器默认打开角色类型，可切换其他图片类型。SDK 返回的普通错误对象会显示具体原因；取消或失败不创建条目，可再次点击重试。真实房间验证与发布状态见 TEST-REPORT.md 和 DEPLOY.md。
+## 界面预览
 
-v0.3.2 为未发布候选，仅补充图片类型参数不足以解决该错误；旧包保留作为任务记录。
+### 团队仓库
 
-## v0.3.1 DM 私密云端插画
+五类钱币分别记账，道具与装备可以记录数量、保管人和说明。
 
-云端模式的隐藏插画改为独立 D1 表和签名管理接口，玩家共享凭证不能读取。按模组、房间与 DM 账号分别保存；清除网站数据不会删除云端记录，重新导入管理配置即可恢复。首次连接会将旧版本在同一云端来源下的本机隐藏插画迁移一次，旧本机副本保留用于恢复，不会因云端删除而反复导入。
+![团队仓库演示，包含钱币余额、道具与装备列表](docs/images/warehouse.png)
 
-枭雄房间模式继续使用原来的 DM 本机私密保存；两个模式来回切换恢复各自的记录，不自动搬迁。图片原文件仍在来源图库或图床，云端只保存链接、标题与说明。
+<details>
+<summary>查看成就列表</summary>
 
-## v0.3.0 存储切换
+长条卡片以文字为主，配以简单插画，显示名称、达成人、描述和品质。
 
-DM 顶栏齿轮可选择枭雄共享或已保存的云端连接，每个连接下可创建多个模组资料库。设置仅作用于当前房间，玩家跟随本房间 DM；其他房间与其他 DM 的配置独立。云端使用 D1 与原站点的 `/api/` 后端，无需另建图片站。
+![成就列表演示，展示欢迎来到德鲁斯肯瓦尔德](docs/images/achievements.png)
 
-首次导入本机管理连接配置后即可使用，以后从列表切换。切换保留原资料；复制为独立操作，只写入空目标，复制回房间前检查全部 metadata 容量。DM 私密插画的保存位置随模式变化，详细步骤见 [CLOUD-STORAGE.md](CLOUD-STORAGE.md)。
+</details>
 
-## 功能
+截图来自 v0.3.3 独立演示，使用示例资料。真实新房间从空白手记开始，成就由 DM 添加。
 
-- 团队仓库：五类钱币分别记账；道具与装备的名称、数量、保管人、说明可编辑，支持搜索与分类。
-- 情报：线索、人物、地点、其他分类；多行正文、跟进/已整理状态、搜索。
-- 插画只有两种导入方式：“从图库选择”和“从链接导入”。图库按钮直接调用官方选择器，不打开本地文件框、不调用上传 API。图片原件需先存入 Owlbear 图库，或已有可公开访问的 HTTPS 图片直链。
-- 插画支持标题、说明、大图与全队展示。DM 可以选择“玩家可见”或“仅 DM 可见”。玩家可编辑公开插画，不能设置私密可见性。
-- 成就：左侧小配图、右侧文字的深色长条列表，所有人可见，仅 DM 可新增、编辑与移除；配图仅接受 HTTPS 链接。标题、达成人、描述和品质显示为内容，不显示字段标签。
-- 独立演示内置“欢迎来到德鲁斯肯瓦尔德”示例卡片；真实新房间成就为空，由 DM 添加。历史已保存的欢迎成就正常保留。
-- 顶栏紧凑：共享模式显示整个房间的容量（包含其他插件）；云端模式显示当前模组的数据量，悬停同时查看房间控制信息占用。独立演示仍可由 DM 主动连接云端，默认使用本地演示数据。
-- 点击书本图标打开，再次点击关闭；不读取或修改地图 Token。
+## 快速安装
 
-## DM 私密插画
+1. 复制下方安装链接。
+2. 在 Owlbear Rodeo 的扩展管理中添加该链接，并在房间中启用“团队手记”。
+3. 点击书本图标打开面板，再次点击即可关闭。
+4. 从团队仓库、情报或插画开始记录资料。DM 可在成就页添加团队里程碑。
 
-- DM 新增插画默认“仅 DM 可见”；玩家新增默认公开；旧版已有插画保持公开。
-- 枭雄房间模式的隐藏插画保存在 DM 当前浏览器 localStorage；云端模式使用独立私密表和签名管理接口。两种模式均不把隐藏链接、标题或说明写入 room/player metadata 或共享云端接口。
-- 云端模式可在同一房间和 DM 账号下跨设备读取，需导入同一后端的管理配置；枭雄房间模式仍不跨设备，清除网站数据会丢失本机隐藏记录。界面按当前模式标注保存位置。
-- 公开后才将引用同步到房间；重新隐藏会移除共享引用，并结束这张图的全队展示。玩家已打开的大图会关闭。已经看过、下载或复制的图片无法撤回。
-- 先保存对应模式的私密副本再隐藏；公开成功后才清理私密副本。发生写入失败时保留可恢复副本，并显示错误，不把仍公开的记录标为私密。云端私密写入使用独立 revision 检查，拒绝旧窗口覆盖。
-- DM 降为玩家时立即隐藏本地私密记录、关闭相关视图，并重新核实编辑身份。
-- 这是插件对真实角色的操作控制；公开 room metadata 本身没有服务端写入权限隔离。
+~~~text
+https://owlbear-twisted-moon.pages.dev/manifest.json
+~~~
 
-“展示给全队”同步插画页中的当前展示，不强制弹出队友面板。私密插画必须先公开才能全队展示。
+发布新版本后，刷新整个 Owlbear 房间即可加载更新。[安装清单](https://owlbear-twisted-moon.pages.dev/manifest.json)
 
-## 数据与容量
+也可以先打开独立演示体验编辑操作。演示默认以 DM 身份使用当前浏览器的本地数据，主动连接云端后会读写所选资料库。[独立演示](https://owlbear-twisted-moon.pages.dev/panel.html)
 
-- 保留命名空间 `io.twisted-moon.v1/` 与演示键 `twisted-moon.demo.v1`；每条记录、每种钱币使用独立键，其他插件数据不改写。
-- 成就使用 `io.twisted-moon.v1/achievement/` 独立键，DM 操作时使用实际 Owlbear 角色校验；其他分区的玩家编辑功能不变。
-- 枭雄模式的公开资料存在 room metadata，云端模式存在所选 D1 资料库。场景切换不清空资料；图片始终只存引用，禁止二进制或 data URL。
-- 房间 metadata 的 16 kB 总量由所有插件共享：普通资料写入在 15,500 字节前拦截，切换控制信息允许使用保留余量至 15,900 字节。云端业务资料不受房间 16 kB 限制；本机私密记录也不计入。
-- 编辑前重新读取并检查记录版本；枭雄模式完全同时修改同一记录仍可能最后写入覆盖。云端使用资料库 revision 与 D1 原子 batch 条件更新，拒绝旧版本写入；切换中的旧请求不会写入新目标。
-- 解析失败保留原始数据并暂停编辑；移除需要确认。内部原始备份方法保留用于维护，界面不提供导出按钮。
-- 独立演示默认保存在当前浏览器，以 DM 身份演示；主动配置云端后操作真实云端数据。演示不代表真实 Owlbear 房间验收。
+## 四个资料栏目
 
-## 图片仓库
+| 栏目 | 可以记录的内容 | 交互方式 |
+| --- | --- | --- |
+| 团队仓库 | 铂币、金币、琥珀金币、银币、铜币，以及道具和装备 | 调整余额、记录数量与保管人、搜索和分类筛选 |
+| 情报 | 线索、人物、地点和其他资料 | 多行正文、跟进与已整理状态、搜索 |
+| 插画 | 图片链接、标题和说明 | Owlbear 图库选择、HTTPS 直链导入、大图查看、全队展示 |
+| 成就 | 名称、达成人、描述、品质和配图链接 | 深色长条列表，DM 维护，全队查看 |
 
-图片使用单独的 GitHub 仓库，不部署图片 Cloudflare 站点；按用户后续授权已改为公开：
+“展示给全队”会同步插画页中的当前展示，队友打开插画页即可查看。
 
-- 仓库：https://github.com/exIncognitor/dnd-github-images
-- 本地：`D:\desktop\dnd\DndGithubImages`，图片放入 `images/`。
-- 图片可用公开 Raw 链接从插件导入。不要在房间中粘贴带 token 的链接或凭据。
+## 玩家与 DM 权限
 
-## 开发与验证
+| 操作 | 玩家 | DM |
+| --- | --- | --- |
+| 查看、编辑团队金钱、道具装备与情报 | ✓ | ✓ |
+| 添加、编辑公开插画和设置当前展示 | ✓ | ✓ |
+| 设置插画为“仅 DM 可见”并查看私密收藏 | — | ✓ |
+| 查看成就 | ✓ | ✓ |
+| 添加、编辑、移除成就 | — | ✓ |
+| 配置存储来源、云端连接与模组资料库 | — | ✓ |
 
-Node >=22.12，沿用官方 SDK 与现有锁定依赖。
+DM 添加插画默认选择“仅 DM 可见”，玩家添加的插画默认公开。私密插画公开后可以展示给全队，重新隐藏时会结束该图片的全队展示，并关闭玩家已打开的大图。已经查看或保存的图片副本无法撤回。
 
-```sh
+## 数据存在哪里
+
+DM 可以通过顶栏齿轮切换当前房间的存储来源。
+
+| 数据 | 枭雄房间模式 | 云端模式 |
+| --- | --- | --- |
+| 团队仓库、金钱、情报、公开插画、成就 | 当前房间的共享 metadata | 所选云端模组的 Cloudflare D1 数据库 |
+| DM 私密插画 | 当前 DM 浏览器，按账号和房间区分 | 独立私密表，按模组、房间和 DM 账号区分 |
+| 图片原文件 | 来源 Owlbear 图库或外部图床 | 来源 Owlbear 图库或外部图床 |
+| 容量显示 | 整个房间的共享占用 | 当前模组共享资料占用 |
+
+- **按房间设置**。新房间默认使用自己的房间共享数据。DM 的来源选择只作用于当前房间，玩家跟随该房间的设置。
+- **按模组整理**。一个云端连接下可以建立多个模组资料库。两个房间由 DM 主动选择同一个云端模组时，共享该模组的公开资料。
+- **切换与复制分开**。“切换并保留原资料”更换读取和保存位置。需要迁移公开资料时，使用“复制当前资料到所选目标”，目标必须为空。
+- **恢复私密资料**。房间模式的本机私密插画会随网站数据清除而丢失。云端私密记录可以在同一房间和 DM 账号下跨设备恢复，需重新导入匹配的管理配置。
+- **图片只保存引用**。插画和成就保存 URL、文字与必要信息，图片原文件由图库或图床托管。
+
+首次连接、资料复制、私密恢复和自建后端的步骤见 [云端存储指南](CLOUD-STORAGE.md)。
+
+### 容量与同步
+
+Owlbear 房间的 16 kB metadata 由全部插件共享。团队手记按 UTF-8 字节计算占用，普通写入保留切换所需余量。云端业务资料单独保存在 D1，房间仍需少量空间存放连接与刷新信息。
+
+房间资料按条目独立保存，编辑前检查版本。完全同时修改同一条房间记录时，仍可能由最后一次写入覆盖。云端使用资料库 revision 与 D1 原子条件更新拒绝陈旧写入，并以房间通知和轮询同步已打开的面板。
+
+客户端依据 Owlbear SDK 的真实角色控制界面操作。公开 room metadata 本身缺少服务端角色写入隔离。云端私密接口与管理操作使用管理私钥签名授权，配置持有者可以管理该后端的全部模组和私密资料。管理配置应由 DM 妥善保存。[权限与后端授权说明](CLOUD-STORAGE.md)
+
+## 图片导入
+
+**从图库选择**会直接打开 Owlbear 官方图片选择器。图片需要已存在于 Owlbear 图库，选择器可以切换角色、地图等类型。
+
+**从链接导入**使用可以直接访问图片的 HTTPS URL。公开 GitHub 仓库中的 Raw 图片直链也可使用，私有图片需要相应的访问授权。成就配图同样通过 HTTPS 链接添加。
+
+## 最近更新
+
+### v0.3.3
+
+- 修复图库因空 `defaultSearch` 被宿主拒绝而无法打开的问题。
+- 真实空房间从已保存资料读取成就，独立演示提供欢迎示例。
+- 图库失败显示具体原因，取消后恢复操作，支持再次选择。
+
+该版本通过 47 项逻辑与本地 D1 测试、14 组浏览器回归及完整构建。Chrome 真实 Owlbear 房间已验证图库打开、选图返回、取消和空房间成就。10 个公开静态文件的生产哈希与发布构建一致。[验证记录](TEST-REPORT.md) · [部署记录](DEPLOY.md)
+
+## 本地开发
+
+需要 Node.js 22.12 或更高版本和 npm。
+
+~~~sh
+git clone https://github.com/exIncognitor/owlbear-team-journal.git
+cd owlbear-team-journal
 npm ci
+npm run dev -- --host 127.0.0.1 --port 5183
+~~~
+
+开发服务器启动后，打开终端显示的 `/panel.html` 地址即可体验本地演示。
+
+### 验证与构建
+
+~~~sh
 npm test
 npm run build
 npm run test:e2e
-npm run dev -- --host 127.0.0.1 --port 5183
-```
+~~~
 
-部署记录见 DEPLOY.md，验证记录见 TEST-REPORT.md。真实房间测试按用户安排由用户进行。未修改战斗面板项目，未上传战役原稿、私有插画或凭据。
+浏览器回归需要 Playwright 对应的 Chromium，首次使用时可运行 `npx playwright install chromium`。`npm run build` 执行 TypeScript 检查、Vite 构建和 Worker 打包，产物位于 `dist/`。
 
-## 官方依据
+### 项目结构
 
-- [原生 Action](https://docs.owlbear.rodeo/extensions/apis/action/)
-- [房间 metadata](https://docs.owlbear.rodeo/extensions/apis/room/)
-- [图库选择](https://docs.owlbear.rodeo/extensions/apis/assets/)
-- [玩家角色与事件](https://docs.owlbear.rodeo/extensions/apis/player/)
-- [共享 Metadata](https://docs.owlbear.rodeo/extensions/reference/metadata/)
+~~~text
+src/                    面板、资料模型、权限与存储路由
+server/worker.ts        Cloudflare D1 接口与签名授权
+public/manifest.json    Owlbear 扩展安装清单
+public/icon.svg         书本图标
+tests/                  浏览器与多客户端回归
+scripts/                云端配置与 Worker 构建工具
+docs/images/            README 演示截图
+~~~
+
+内部资料键使用 `io.twisted-moon.v1/` 命名空间，演示数据键为 `twisted-moon.demo.v1`。开发涉及数据格式时，需要兼容已保存记录。
+
+### 自行部署
+
+前端和已编译 Worker 通过 Cloudflare Pages Direct Upload 发布，云端模式需要绑定 D1 数据库并配置管理公钥。GitHub 源码推送与 Pages 发布分别执行。首次部署流程及配置说明见 [云端存储指南](CLOUD-STORAGE.md) 和 [部署记录](DEPLOY.md)。
+
+## 反馈与参考
+
+反馈问题时，请说明插件版本、存储模式、DM 或玩家身份、复现步骤和错误提示。截图可以帮助定位问题，请遮盖管理配置与私密战役内容。[提交问题](https://github.com/exIncognitor/owlbear-team-journal/issues)
+
+- [Owlbear 原生 Action API](https://docs.owlbear.rodeo/extensions/apis/action/)
+- [Owlbear 房间 metadata](https://docs.owlbear.rodeo/extensions/apis/room/)
+- [Owlbear 图库 API](https://docs.owlbear.rodeo/extensions/apis/assets/)
+- [Owlbear 玩家角色与事件](https://docs.owlbear.rodeo/extensions/apis/player/)
