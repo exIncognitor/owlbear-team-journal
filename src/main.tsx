@@ -239,7 +239,7 @@ function App() {
         void OBR.action.setHeight(700).catch((e) => setError(String(e)));
         void OBR.action.setTitle("团队手记").catch((e) => setError(String(e)));
         void OBR.action
-          .setIcon("/icon.svg?v=0.3.2")
+          .setIcon("/icon.svg?v=0.3.3")
           .catch((e) => setError(String(e)));
       });
   }, []);

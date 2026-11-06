@@ -1,5 +1,16 @@
 # 验证记录
 
+## v0.3.3 真实图库错误修复 · 2026-11-06
+
+- Git 恢复起点为 `68974bdfb1eedc2d0064220e71480f7b33754e9e`，接续时工作树干净。此前 v0.3.2 候选包与截图保留。
+- 在 Chrome 的 `The Bent Flair` 房间，以实际 DM 身份打开线上 v0.3.1 团队手记。房间共享占用 0.00 kB，成就计数仍为 1，证实默认欢迎卡片出现在真实空房间。
+- 通过正常按钮复现图库立即显示 `[object Object]`。使用受支持的 Chrome CDP 子页面目标，在插件 iframe 临时监听仅 `OBR_ASSETS_DOWNLOAD_IMAGES_ERROR` 消息，捕获真实错误 `ValidationError: "defaultSearch" is not allowed to be empty`。监听器已移除，没有写入房间业务资料。原始错误与截图分别位于 `qa/v0.3.3/room-gallery-error.json`、`qa/v0.3.3/room-gallery-before.jpg`。
+- 修复为 `downloadImages(false, search.trim() || undefined, "CHARACTER")`。空搜索词省略，非空词保留并去除首尾空白。v0.3.2 仅补图片类型参数的假设现已由实际错误排除。
+- 47 项逻辑/真实本地 D1 测试通过。新增空白搜索词省略及非空搜索词保留回归，错误对象使用实际宿主的嵌套格式。
+- 14 组浏览器回归通过，模拟宿主增加真实空字符串拒绝校验，继续覆盖图库失败、取消、重试和跨房间成就隔离。TypeScript、Vite、Worker 构建及 diff 检查通过。
+- 发布包 `DEPLOY-READY-v0.3.3.zip` 包含 13 个文件，SHA-256 为 `6f5ec7e0a4a551e7a191c093a33004e9acb97f2448abb5917c1c10c01ff83365`。构建不含管理私钥，公钥与原连接配置匹配。
+- 目前等待用户在 Chrome 完成 Cloudflare 登录，发布后需验证真实图库打开、选择及取消，以及空房间成就计数。生产状态见 DEPLOY.md。
+
 ## v0.3.2 图库兼容与空房间成就 · 2026-11-06
 
 - Git 恢复起点：`5c40683e9abb43b09c52f676fdd78274f7f11b1a`。本轮接续的三个未提交源码文件属于同一次 bug 修复，未覆盖其他任务改动；没有修改正式房间或生产数据库。

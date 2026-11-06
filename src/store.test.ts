@@ -233,7 +233,7 @@ it("opens the official gallery directly without uploading a local file", async (
     url: "https://images.example.org/uploaded.webp",
   });
   expect(assets.upload).not.toHaveBeenCalled();
-  expect(assets.pick).toHaveBeenCalledWith(false, "", "CHARACTER");
+  expect(assets.pick).toHaveBeenCalledWith(false, undefined, "CHARACTER");
   expect(room.write).not.toHaveBeenCalled();
 });
 it("reports all room metadata as UTF-8 bytes and updates when another plugin writes", async () => {
@@ -259,12 +259,24 @@ it("does not create a fake gallery entry when asset selection is cancelled", asy
   expect(await store.pick()).toBeNull();
   expect(room.write).not.toHaveBeenCalled();
 });
+it("omits blank gallery searches and preserves nonempty searches", async () => {
+  const store = new TeamStore(hub().driver);
+  await store.pick("   ");
+  expect(assets.pick).toHaveBeenLastCalledWith(false, undefined, "CHARACTER");
+  await store.pick("  芙蕾雅  ");
+  expect(assets.pick).toHaveBeenLastCalledWith(false, "芙蕾雅", "CHARACTER");
+});
 it("reports plain-object picker failures and permits a later retry without writing room data", async () => {
   const room = hub(),
     store = new TeamStore(room.driver);
-  assets.pick.mockRejectedValueOnce({ message: "图库启动失败" });
+  assets.pick.mockRejectedValueOnce({
+    error: {
+      name: "ValidationError",
+      message: '"defaultSearch" is not allowed to be empty',
+    },
+  });
   await expect(store.pick()).rejects.toThrow(
-    "无法打开 Owlbear 图库：图库启动失败",
+    '无法打开 Owlbear 图库："defaultSearch" is not allowed to be empty',
   );
   expect(room.write).not.toHaveBeenCalled();
   assets.pick.mockResolvedValueOnce([

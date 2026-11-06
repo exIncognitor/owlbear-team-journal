@@ -1,14 +1,14 @@
 {
   "name": "团队手记",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "manifest_version": 1,
   "description": "共享仓库、金钱、情报和插画；DM 管理全队成就及插画可见性。",
   "author": "Team Journal",
-  "icon": "/icon.svg?v=0.3.2",
+  "icon": "/icon.svg?v=0.3.3",
   "homepage_url": "https://owlbear-twisted-moon.pages.dev/",
   "action": {
     "title": "团队手记",
-    "icon": "/icon.svg?v=0.3.2",
+    "icon": "/icon.svg?v=0.3.3",
     "popover": "/panel.html",
     "width": 760,
     "height": 700

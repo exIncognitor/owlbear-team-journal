@@ -445,9 +445,9 @@ export class TeamStore {
   async pick(search = ""): Promise<Pick<Artwork, "title" | "url"> | null> {
     if (this.demo)
       throw Error("独立演示请从链接导入；Owlbear 图库在房间内可用");
-    // Supply every picker option explicitly, including the initial asset tab.
+    // Owlbear rejects an empty defaultSearch before opening the picker.
     const images = await OBR.assets
-      .downloadImages(false, search, "CHARACTER")
+      .downloadImages(false, search.trim() || undefined, "CHARACTER")
       .catch((error: unknown) => {
         throw Error(`无法打开 Owlbear 图库：${errorMessage(error)}`);
       });

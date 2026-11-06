@@ -57,8 +57,11 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
       if(id==='OBR_ASSETS_UPLOAD_IMAGES')response={};
       if(id==='OBR_ASSETS_DOWNLOAD_IMAGES'){
         galleryCalls++;
-        if(data.multiple!==false||data.defaultSearch!==''||data.typeHint!=='CHARACTER'){
-          event.source.postMessage({id:id+'_ERROR'+nonce,data:{issues:[{path:['typeHint'],message:'图片选择参数不完整'}]}},event.origin);return;
+        if(data.defaultSearch===''){
+          event.source.postMessage({id:id+'_ERROR'+nonce,data:{error:{name:'ValidationError',message:'"defaultSearch" is not allowed to be empty'}}},event.origin);return;
+        }
+        if(data.multiple!==false||data.defaultSearch!==undefined||data.typeHint!=='CHARACTER'){
+          event.source.postMessage({id:id+'_ERROR'+nonce,data:{message:'图片选择参数不正确'}},event.origin);return;
         }
         if(galleryCalls===1){event.source.postMessage({id:id+'_ERROR'+nonce,data:{message:'测试图库启动失败'}},event.origin);return;}
         response={images:galleryCalls===2?[]:[{name:'月下风景',image:{url:'https://images.example.org/landscape.png',width:40,height:40,mime:'image/png'}}]};
@@ -118,7 +121,7 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
     "无法打开 Owlbear 图库：测试图库启动失败",
   );
   await expect(player.getByRole("dialog")).toHaveCount(0);
-  await page.screenshot({ path: "qa/v0.3.2/gallery-error.png" });
+  await page.screenshot({ path: "qa/v0.3.3/gallery-error.png" });
   await player.getByRole("button", { name: "从图库选择", exact: true }).click();
   await expect(
     player.getByRole("button", { name: "从图库选择", exact: true }),
@@ -144,7 +147,7 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
       frame.getByRole("region", { name: "当前展示" }).locator("img"),
     ).toHaveJSProperty("complete", true);
   }
-  await page.screenshot({ path: "qa/v0.3.2/native-two-clients.png" });
+  await page.screenshot({ path: "qa/v0.3.3/native-two-clients.png" });
   const metadata = JSON.parse(
     (await page.locator("#metadata").textContent()) || "{}",
   );
@@ -234,7 +237,7 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
   expect((await page.locator("#metadata").textContent()) || "{}").not.toContain(
     "private.png",
   );
-  await page.screenshot({ path: "qa/v0.3.2/private-gallery.png" });
+  await page.screenshot({ path: "qa/v0.3.3/private-gallery.png" });
   for (const frame of [player, dm])
     await frame.getByRole("button", { name: /^成就/ }).click();
   await other.getByRole("button", { name: /^成就/ }).click();
