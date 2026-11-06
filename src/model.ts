@@ -2,12 +2,11 @@ export const PREFIX = "io.twisted-moon.v1/";
 export const RECORD_PREFIX = PREFIX + "entry/";
 export const ACHIEVEMENT_PREFIX = PREFIX + "achievement/";
 export const QUALITIES = ["普通", "优秀", "稀有", "史诗", "传说"] as const;
-export const COINS = ["pp", "gp", "ep", "sp", "cp"] as const;
+export const COINS = ["pp", "gp", "sp", "cp"] as const;
 export type Coin = (typeof COINS)[number];
 export const COIN_LABELS: Record<Coin, string> = {
-  pp: "铂币",
+  pp: "铂金币",
   gp: "金币",
-  ep: "琥珀金币",
   sp: "银币",
   cp: "铜币",
 };

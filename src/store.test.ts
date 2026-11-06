@@ -17,6 +17,7 @@ import {
   WELCOME_ACHIEVEMENT,
   DISPLAY_KEY,
   RECORD_PREFIX,
+  PREFIX,
   moneyKey,
   type Draft,
   type Entry,
@@ -118,7 +119,9 @@ it("rejects a stale editor after another client edits or removes its record", as
   stop();
 });
 it("changes only edited denominations and detects a conflicting money edit", async () => {
-  const room = hub(),
+  const legacyKey = PREFIX + "money/ep";
+  const legacyBalance = { value: 7, rev: "legacy" };
+  const room = hub({ [legacyKey]: legacyBalance }),
     store = new TeamStore(room.driver);
   const stop = await connect(store);
   const base = structuredClone(store.state.money);
@@ -131,6 +134,10 @@ it("changes only edited denominations and detects a conflicting money edit", asy
   expect(store.state.money.gp.value).toBe(20);
   expect(store.state.money.sp.value).toBe(50);
   expect(room.get()[moneyKey("gp")]).toMatchObject({ value: 20 });
+  expect(room.get()[legacyKey]).toEqual(legacyBalance);
+  expect(
+    room.write.mock.calls.every(([update]) => !(legacyKey in update)),
+  ).toBe(true);
   stop();
 });
 it("clears shared presentation when its artwork is removed and preserves the asset URL in backup before removal", async () => {

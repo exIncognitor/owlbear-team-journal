@@ -34,6 +34,8 @@ export const STAMP_KEY = "__team_journal_read_stamp";
 export function businessKey(key: string) {
   return (
     key === DISPLAY_KEY ||
+    // Preserve legacy EP records when copying existing room or cloud data.
+    key === PREFIX + "money/ep" ||
     COINS.some((c) => key === moneyKey(c)) ||
     [RECORD_PREFIX, ACHIEVEMENT_PREFIX].some(
       (prefix) =>

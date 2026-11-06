@@ -6,6 +6,10 @@ import {
   RECORD_PREFIX,
   ACHIEVEMENT_PREFIX,
   WELCOME_ACHIEVEMENT,
+  COINS,
+  COIN_LABELS,
+  PREFIX,
+  moneyKey,
   safeImageUrl,
   unpack,
   validateEntry,
@@ -22,6 +26,21 @@ const note: Intel = {
   content: "我们记录下看见的事。".repeat(400),
   resolved: false,
 };
+it("reads four denominations and names platinum coins without exposing legacy EP", async () => {
+  const state = await readSnapshot({
+    [moneyKey("pp")]: { value: 3, rev: "platinum" },
+    [PREFIX + "money/ep"]: { value: 7, rev: "legacy" },
+  });
+  expect(COINS).toEqual(["pp", "gp", "sp", "cp"]);
+  expect(COINS.map((coin) => COIN_LABELS[coin])).toEqual([
+    "铂金币",
+    "金币",
+    "银币",
+    "铜币",
+  ]);
+  expect(Object.keys(state.money)).toEqual(["pp", "gp", "sp", "cp"]);
+  expect(state.money.pp.value).toBe(3);
+});
 it("only shows explicitly saved room achievements and keeps the welcome sample opt-in", async () => {
   expect((await readSnapshot({})).achievements).toEqual([]);
   expect((await readSnapshot({}, true, true)).achievements).toEqual([

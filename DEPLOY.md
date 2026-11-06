@@ -1,6 +1,16 @@
 # Cloudflare Pages 部署
 
-## 当前发布 · v0.3.3 · 2026-11-06
+## 当前发布 · v0.3.4 · 2026-11-06
+
+- 团队金钱显示与编辑统一为铂金币、金币、银币、铜币四种，四列布局同步调整。旧 EP 记录按兼容数据保留，房间与云端之间复制时携带原记录。
+- 在用户改名后的 `owlbear-team-journal` 目录完成构建与回归，Git 远程为 `exIncognitor/owlbear-team-journal`。恢复起点为 `481cfcc8b23e32a1b80ed4440c56806a4a22eea8`。
+- 48 项逻辑/本地 D1 测试与 14 组浏览器回归通过。README、演示截图及产品主页的货币说明同步更新。
+- 原 Pages 项目 Production Direct Upload 显示 13/13 文件上传与发布成功。线上清单版本为 0.3.4，10 个公开静态文件哈希与构建一致，D1 健康接口确认绑定有效。
+- Chrome 真实房间验证四种余额标签、四项金钱编辑输入与取消操作，共享占用为 0.00 kB。线上仅打开编辑器并取消，保存与刷新恢复由浏览器回归验证。
+- 发布包为 `DEPLOY-READY-v0.3.4.zip`，SHA-256 为 `75c0f790ba0041aed6a23f864b4d537db2dc0850e0819ce38498b99fc94077db`。构建已确认不含管理私钥，后端公钥匹配原管理配置。
+- 安装地址为 https://owlbear-twisted-moon.pages.dev/manifest.json 。房间全页刷新后加载新版。证据位于 `qa/v0.3.4/deploy-success.jpg`、`room-four-currencies.jpg`、`room-money-editor.jpg` 与 `production-verification.json`，仅本地保留。
+
+## 历史发布 · v0.3.3 · 2026-11-06
 
 - Chrome 真实房间已复现图库错误并取得宿主原因，修复空 `defaultSearch` 参数，同时包含空房间默认成就修复。
 - 发布包 `DEPLOY-READY-v0.3.3.zip`，13 文件，SHA-256 为 `6f5ec7e0a4a551e7a191c093a33004e9acb97f2448abb5917c1c10c01ff83365`。47 项逻辑/D1、14 组浏览器回归与构建通过，管理私钥排除检查通过。

@@ -419,7 +419,7 @@ button.primary:hover {
 }
 .coin-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 24px;
 }
@@ -458,9 +458,6 @@ button.primary:hover {
 }
 .coin.cp i {
   background: #aa6e4c;
-}
-.coin.ep i {
-  background: #aeaa79;
 }
 .coin strong {
   font-size: clamp(16px, 3vw, 25px);

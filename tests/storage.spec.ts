@@ -216,7 +216,7 @@ test("DM storage settings switch one room across two libraries and restore room 
   ).toBeVisible();
   await dm.getByRole("button", { name: "存储设置", exact: true }).click();
   await dm.getByLabel("存储来源").selectOption("room");
-  await page.screenshot({ path: "qa/v0.3.3/storage-settings.png" });
+  await page.screenshot({ path: "qa/v0.3.4/storage-settings.png" });
   await dm
     .getByRole("button", { name: "切换并保留原资料", exact: true })
     .click();
@@ -245,7 +245,7 @@ test("DM storage settings switch one room across two libraries and restore room 
   await expect(
     dm.getByText("仅 DM 可见 · 云端", { exact: true }),
   ).toBeVisible();
-  await page.screenshot({ path: "qa/v0.3.3/cloud-private.png" });
+  await page.screenshot({ path: "qa/v0.3.4/cloud-private.png" });
   await page.evaluate(() => localStorage.clear());
   await page
     .locator("#dm")

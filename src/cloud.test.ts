@@ -15,6 +15,7 @@ import {
   RECORD_PREFIX,
   WELCOME_ACHIEVEMENT,
   ACHIEVEMENT_PREFIX,
+  PREFIX,
   type Metadata,
   type Draft,
   type Artwork,
@@ -209,7 +210,9 @@ it("switches only one room, retains both datasets and original room metadata, an
   expect(local).toContain("原房间药水");
 });
 it("copies to an empty cloud library, preserves its source, and refuses overwriting existing target data", async () => {
-  const a = room("copy-room");
+  const legacyKey = PREFIX + "money/ep";
+  const legacyBalance = { value: 7, rev: "legacy" };
+  const a = room("copy-room", { [legacyKey]: legacyBalance });
   await connect(a.store);
   await a.router.saveProfile(profile);
   await a.store.save(potion);
@@ -221,7 +224,15 @@ it("copies to an empty cloud library, preserves its source, and refuses overwrit
   await a.store.selectStorage(profile, lib);
   expect(a.store.state.entries[0].title).toBe("药水");
   expect(a.store.state.achievements).toEqual([]);
+  expect((await a.router.read())[legacyKey]).toEqual(legacyBalance);
+  expect(a.data()[legacyKey]).toEqual(legacyBalance);
   await expect(a.store.copyStorage()).rejects.toThrow("原资料仍保留");
+  const target = room("copy-legacy-currency-target");
+  await connect(target.store);
+  await target.router.saveProfile(profile);
+  await target.store.selectStorage(profile, lib);
+  await target.store.copyStorage();
+  expect(target.data()[legacyKey]).toEqual(legacyBalance);
 });
 it("copies actual saved achievements and deletion markers without inventing a welcome card", async () => {
   const a = room("copy-saved-achievements");

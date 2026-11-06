@@ -121,7 +121,7 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
     "无法打开 Owlbear 图库：测试图库启动失败",
   );
   await expect(player.getByRole("dialog")).toHaveCount(0);
-  await page.screenshot({ path: "qa/v0.3.3/gallery-error.png" });
+  await page.screenshot({ path: "qa/v0.3.4/gallery-error.png" });
   await player.getByRole("button", { name: "从图库选择", exact: true }).click();
   await expect(
     player.getByRole("button", { name: "从图库选择", exact: true }),
@@ -147,7 +147,7 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
       frame.getByRole("region", { name: "当前展示" }).locator("img"),
     ).toHaveJSProperty("complete", true);
   }
-  await page.screenshot({ path: "qa/v0.3.3/native-two-clients.png" });
+  await page.screenshot({ path: "qa/v0.3.4/native-two-clients.png" });
   const metadata = JSON.parse(
     (await page.locator("#metadata").textContent()) || "{}",
   );
@@ -237,7 +237,7 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
   expect((await page.locator("#metadata").textContent()) || "{}").not.toContain(
     "private.png",
   );
-  await page.screenshot({ path: "qa/v0.3.3/private-gallery.png" });
+  await page.screenshot({ path: "qa/v0.3.4/private-gallery.png" });
   for (const frame of [player, dm])
     await frame.getByRole("button", { name: /^成就/ }).click();
   await other.getByRole("button", { name: /^成就/ }).click();

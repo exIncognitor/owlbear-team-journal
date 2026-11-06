@@ -3,7 +3,7 @@
 <p align="center">Owlbear Rodeo 团队资料插件 · Team Journal</p>
 
 <p align="center">
-  <a href="https://owlbear-twisted-moon.pages.dev/manifest.json"><img alt="Version 0.3.3" src="https://img.shields.io/badge/version-0.3.3-d9bf83" /></a>
+  <a href="https://owlbear-twisted-moon.pages.dev/manifest.json"><img alt="Version 0.3.4" src="https://img.shields.io/badge/version-0.3.4-d9bf83" /></a>
   <a href="https://www.owlbear.rodeo/"><img alt="Owlbear Rodeo extension" src="https://img.shields.io/badge/Owlbear_Rodeo-extension-8b75bb" /></a>
   <a href="https://www.typescriptlang.org/"><img alt="React and TypeScript" src="https://img.shields.io/badge/React_19-TypeScript-3178c6" /></a>
 </p>
@@ -21,7 +21,7 @@
 
 ### 团队仓库
 
-五类钱币分别记账，道具与装备可以记录数量、保管人和说明。
+铂金币、金币、银币与铜币分别记账，道具与装备可以记录数量、保管人和说明。
 
 ![团队仓库演示，包含钱币余额、道具与装备列表](docs/images/warehouse.png)
 
@@ -34,7 +34,7 @@
 
 </details>
 
-截图来自 v0.3.3 独立演示，使用示例资料。真实新房间从空白手记开始，成就由 DM 添加。
+截图来自 v0.3.4 独立演示，使用示例资料。真实新房间从空白手记开始，成就由 DM 添加。
 
 ## 快速安装
 
@@ -55,7 +55,7 @@ https://owlbear-twisted-moon.pages.dev/manifest.json
 
 | 栏目 | 可以记录的内容 | 交互方式 |
 | --- | --- | --- |
-| 团队仓库 | 铂币、金币、琥珀金币、银币、铜币，以及道具和装备 | 调整余额、记录数量与保管人、搜索和分类筛选 |
+| 团队仓库 | 铂金币、金币、银币、铜币，以及道具和装备 | 调整余额、记录数量与保管人、搜索和分类筛选 |
 | 情报 | 线索、人物、地点和其他资料 | 多行正文、跟进与已整理状态、搜索 |
 | 插画 | 图片链接、标题和说明 | Owlbear 图库选择、HTTPS 直链导入、大图查看、全队展示 |
 | 成就 | 名称、达成人、描述、品质和配图链接 | 深色长条列表，DM 维护，全队查看 |
@@ -109,6 +109,11 @@ Owlbear 房间的 16 kB metadata 由全部插件共享。团队手记按 UTF-8 �
 **从链接导入**使用可以直接访问图片的 HTTPS URL。公开 GitHub 仓库中的 Raw 图片直链也可使用，私有图片需要相应的访问授权。成就配图同样通过 HTTPS 链接添加。
 
 ## 最近更新
+
+### v0.3.4
+
+- 钱币调整为铂金币、金币、银币和铜币四种，余额展示与编辑器同步更新。
+- 旧版 EP 余额作为兼容记录保存，资料复制仍会携带该记录。
 
 ### v0.3.3
 

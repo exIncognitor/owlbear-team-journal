@@ -4,7 +4,15 @@ test("money, items and equipment can be edited and survive a reload", async ({
   page,
 }) => {
   await page.goto("/panel.html");
+  await expect(page.locator(".coin-label")).toHaveText([
+    /铂金币\s*PP/,
+    /金币\s*GP/,
+    /银币\s*SP/,
+    /铜币\s*CP/,
+  ]);
   await page.getByRole("button", { name: "调整金钱", exact: true }).click();
+  await expect(page.getByRole("spinbutton")).toHaveCount(4);
+  await page.getByLabel("铂金币 · PP", { exact: true }).fill("2");
   await page.getByLabel("金币 · GP", { exact: true }).fill("220");
   await page.getByRole("button", { name: "保存金钱", exact: true }).click();
   await expect(page.getByLabel("金币余额", { exact: true })).toHaveText("220");
@@ -19,6 +27,7 @@ test("money, items and equipment can be edited and survive a reload", async ({
     page.getByRole("heading", { name: "月银长弓", exact: true }),
   ).toBeVisible();
   await page.reload();
+  await expect(page.getByLabel("铂金币余额", { exact: true })).toHaveText("2");
   await expect(page.getByLabel("金币余额", { exact: true })).toHaveText("220");
   await page.getByLabel("筛选分类").selectOption("装备");
   await expect(
@@ -165,7 +174,7 @@ for (const width of [390, 760])
       .fill("键盘和滚动均可编辑。");
     await page.getByRole("button", { name: "保存", exact: true }).click();
     await page.getByRole("button", { name: /^团队仓库/ }).click();
-    await page.screenshot({ path: `qa/v0.3.3/panel-${width}.png` });
+    await page.screenshot({ path: `qa/v0.3.4/panel-${width}.png` });
   });
 
 for (const width of [390, 760])
@@ -192,7 +201,7 @@ for (const width of [390, 760])
       iconBox = await card.locator(".achievement-icon").boundingBox();
     expect(iconBox!.width).toBeLessThan(cardBox!.width / 4);
     expect(cardBox!.width / cardBox!.height).toBeGreaterThan(2.3);
-    await page.screenshot({ path: `qa/v0.3.3/achievements-${width}.png` });
+    await page.screenshot({ path: `qa/v0.3.4/achievements-${width}.png` });
   });
 
 test("compact journal header and book manifest keep the native action and only two artwork import methods", async ({
@@ -214,10 +223,10 @@ test("compact journal header and book manifest keep the native action and only t
   ]);
   const manifest = await (await page.request.get("/manifest.json")).json();
   expect(manifest.name).toBe("团队手记");
-  expect(manifest.version).toBe("0.3.3");
+  expect(manifest.version).toBe("0.3.4");
   expect(manifest.action).toMatchObject({
     title: "团队手记",
-    icon: "/icon.svg?v=0.3.3",
+    icon: "/icon.svg?v=0.3.4",
     popover: "/panel.html",
     width: 760,
     height: 700,
@@ -247,7 +256,7 @@ for (const width of [390, 1440])
       ),
     ).toBe(true);
     await page.screenshot({
-      path: `qa/v0.3.3/home-${width}.png`,
+      path: `qa/v0.3.4/home-${width}.png`,
       fullPage: true,
     });
   });
