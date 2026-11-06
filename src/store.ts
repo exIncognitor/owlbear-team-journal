@@ -1,4 +1,5 @@
 import OBR from "@owlbear-rodeo/sdk";
+import { errorMessage } from "./errors";
 import {
   BrowserArtVault,
   CloudArtVault,
@@ -134,7 +135,7 @@ export class TeamStore {
     const state = await readSnapshot(
       metadata,
       this.demo,
-      this.storage?.info().mode !== "cloud",
+      this.demo && this.storage?.info().mode !== "cloud",
     );
     if (this.storage) {
       state.storage = this.storage.info();
@@ -444,7 +445,12 @@ export class TeamStore {
   async pick(search = ""): Promise<Pick<Artwork, "title" | "url"> | null> {
     if (this.demo)
       throw Error("独立演示请从链接导入；Owlbear 图库在房间内可用");
-    const images = await OBR.assets.downloadImages(false, search);
+    // Supply every picker option explicitly, including the initial asset tab.
+    const images = await OBR.assets
+      .downloadImages(false, search, "CHARACTER")
+      .catch((error: unknown) => {
+        throw Error(`无法打开 Owlbear 图库：${errorMessage(error)}`);
+      });
     if (!images.length) return null;
     return {
       title: images[0].name.slice(0, 80) || "未命名插画",

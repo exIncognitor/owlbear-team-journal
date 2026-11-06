@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import OBR from "@owlbear-rodeo/sdk";
+import { errorMessage } from "./errors";
 import { createStore } from "./store";
 import { StorageSettings } from "./StorageSettings";
 import {
@@ -238,7 +239,7 @@ function App() {
         void OBR.action.setHeight(700).catch((e) => setError(String(e)));
         void OBR.action.setTitle("团队手记").catch((e) => setError(String(e)));
         void OBR.action
-          .setIcon("/icon.svg?v=0.3.0")
+          .setIcon("/icon.svg?v=0.3.2")
           .catch((e) => setError(String(e)));
       });
   }, []);
@@ -251,7 +252,7 @@ function App() {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     } finally {
       lock.current = false;
       setBusy(false);

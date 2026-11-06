@@ -25,30 +25,44 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
   const ref = encodeURIComponent(
     Buffer.from(`${origin} local-team-room`).toString("base64"),
   );
+  const otherRef = encodeURIComponent(
+    Buffer.from(`${origin} another-team-room`).toString("base64"),
+  );
   await page.route("**/native-test", (route) =>
     route.fulfill({
       contentType: "text/html; charset=utf-8",
       body: `<!doctype html><html><meta charset="utf-8"><style>body{margin:0;background:#292b39;color:white;font:14px sans-serif}.client{display:inline-block;width:760px;vertical-align:top;margin:12px}iframe{display:block;width:760px;height:700px;border:0}.label{height:25px}</style><div class="client"><div class="label">模拟玩家客户端</div><iframe id="player" name="player" title="玩家客户端" src="/panel.html?obrref=${ref}"></iframe></div><div class="client"><div class="label">模拟 DM 客户端</div><iframe id="dm" name="dm" title="DM 客户端" src="/panel.html?obrref=${ref}"></iframe></div><output id="events" hidden></output><output id="metadata" hidden></output><script>
     const frames=[...document.querySelectorAll('iframe')];
     let metadata=JSON.parse(localStorage.getItem('native-test-metadata')||'{"other.extension":{"untouched":true}}');
-    const events=[];
+    let otherMetadata=JSON.parse(localStorage.getItem('native-test-other-metadata')||'{}');
+    const otherFrame=document.createElement('iframe');otherFrame.id='other';otherFrame.name='other';otherFrame.title='另一个房间';otherFrame.src='/panel.html?obrref=${otherRef}';document.body.append(otherFrame);frames.push(otherFrame);
+    const events=[];let galleryCalls=0;
     for(const frame of frames)frame.onload=()=>frame.contentWindow.postMessage({id:'OBR_READY',data:{ref:frame.id,userId:frame.id}},location.origin);
     window.addEventListener('message',event=>{
       const frame=frames.find(f=>f.contentWindow===event.source);
       if(!frame||event.origin!==location.origin)return;
-      const {id,data,nonce}=event.data;events.push({id,from:frame.id,file:id==='OBR_ASSETS_UPLOAD_IMAGES'?data.images[0].file.name:undefined});document.getElementById('events').textContent=JSON.stringify(events);
+      const {id,data,nonce}=event.data;events.push({id,from:frame.id,options:id==='OBR_ASSETS_DOWNLOAD_IMAGES'?data:undefined,file:id==='OBR_ASSETS_UPLOAD_IMAGES'?data.images[0].file.name:undefined});document.getElementById('events').textContent=JSON.stringify(events);
       let response;
       if(id==='OBR_ACTION_SET_WIDTH')response={};
       if(id==='OBR_ACTION_SET_HEIGHT')response={};
       if(id==='OBR_ACTION_SET_TITLE'||id==='OBR_ACTION_SET_ICON')response={};
       if(id==='OBR_PLAYER_GET_ROLE')response={role:frame.id==='dm'?'GM':'PLAYER'};
-      if(id==='OBR_ROOM_GET_METADATA')response={metadata};
+      if(id==='OBR_ROOM_GET_METADATA')response={metadata:frame.id==='other'?otherMetadata:metadata};
       if(id==='OBR_ROOM_SET_METADATA'){
-        metadata={...metadata,...data.update};localStorage.setItem('native-test-metadata',JSON.stringify(metadata));document.getElementById('metadata').textContent=JSON.stringify(metadata);response={};
-        frames.forEach(f=>f.contentWindow.postMessage({id:'OBR_ROOM_METADATA_EVENT_CHANGE',data:{metadata}},location.origin));
+        let updated;
+        if(frame.id==='other'){otherMetadata={...otherMetadata,...data.update};localStorage.setItem('native-test-other-metadata',JSON.stringify(otherMetadata));updated=otherMetadata;}
+        else{metadata={...metadata,...data.update};localStorage.setItem('native-test-metadata',JSON.stringify(metadata));document.getElementById('metadata').textContent=JSON.stringify(metadata);updated=metadata;}response={};
+        frames.filter(f=>(f.id==='other')===(frame.id==='other')).forEach(f=>f.contentWindow.postMessage({id:'OBR_ROOM_METADATA_EVENT_CHANGE',data:{metadata:updated}},location.origin));
       }
       if(id==='OBR_ASSETS_UPLOAD_IMAGES')response={};
-      if(id==='OBR_ASSETS_DOWNLOAD_IMAGES')response={images:[{name:'月下风景',image:{url:'https://images.example.org/landscape.png',width:40,height:40,mime:'image/png'}}]};
+      if(id==='OBR_ASSETS_DOWNLOAD_IMAGES'){
+        galleryCalls++;
+        if(data.multiple!==false||data.defaultSearch!==''||data.typeHint!=='CHARACTER'){
+          event.source.postMessage({id:id+'_ERROR'+nonce,data:{issues:[{path:['typeHint'],message:'图片选择参数不完整'}]}},event.origin);return;
+        }
+        if(galleryCalls===1){event.source.postMessage({id:id+'_ERROR'+nonce,data:{message:'测试图库启动失败'}},event.origin);return;}
+        response={images:galleryCalls===2?[]:[{name:'月下风景',image:{url:'https://images.example.org/landscape.png',width:40,height:40,mime:'image/png'}}]};
+      }
       if(response!==undefined&&nonce)event.source.postMessage({id:id+'_RESPONSE'+nonce,data:response},event.origin);
     });
   </script></html>`,
@@ -56,7 +70,8 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
   );
   await page.goto("/native-test");
   const player = page.frameLocator("#player"),
-    dm = page.frameLocator("#dm");
+    dm = page.frameLocator("#dm"),
+    other = page.frameLocator("#other");
   await expect(
     player.getByText("已连接房间资料", { exact: true }),
   ).toBeVisible();
@@ -99,6 +114,19 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
   for (const frame of [player, dm])
     await frame.getByRole("button", { name: /^插画/ }).click();
   await player.getByRole("button", { name: "从图库选择", exact: true }).click();
+  await expect(player.getByRole("alert")).toContainText(
+    "无法打开 Owlbear 图库：测试图库启动失败",
+  );
+  await expect(player.getByRole("dialog")).toHaveCount(0);
+  await page.screenshot({ path: "qa/v0.3.2/gallery-error.png" });
+  await player.getByRole("button", { name: "从图库选择", exact: true }).click();
+  await expect(
+    player.getByRole("button", { name: "从图库选择", exact: true }),
+  ).toBeEnabled();
+  await expect(player.getByRole("alert")).toHaveCount(0);
+  await expect(player.getByRole("dialog")).toHaveCount(0);
+  await expect(player.locator(".art-card")).toHaveCount(0);
+  await player.getByRole("button", { name: "从图库选择", exact: true }).click();
   await expect(player.getByRole("dialog", { name: "添加资料" })).toBeVisible();
   await player.getByRole("button", { name: "保存", exact: true }).click();
   await expect(
@@ -116,7 +144,7 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
       frame.getByRole("region", { name: "当前展示" }).locator("img"),
     ).toHaveJSProperty("complete", true);
   }
-  await page.screenshot({ path: "qa/v0.3.1/native-two-clients.png" });
+  await page.screenshot({ path: "qa/v0.3.2/native-two-clients.png" });
   const metadata = JSON.parse(
     (await page.locator("#metadata").textContent()) || "{}",
   );
@@ -206,9 +234,19 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
   expect((await page.locator("#metadata").textContent()) || "{}").not.toContain(
     "private.png",
   );
-  await page.screenshot({ path: "qa/v0.3.1/private-gallery.png" });
+  await page.screenshot({ path: "qa/v0.3.2/private-gallery.png" });
   for (const frame of [player, dm])
     await frame.getByRole("button", { name: /^成就/ }).click();
+  await other.getByRole("button", { name: /^成就/ }).click();
+  for (const frame of [player, dm, other])
+    await expect(frame.locator(".achievement-card")).toHaveCount(0);
+  await dm.getByRole("button", { name: "添加成就" }).click();
+  await dm.getByLabel("成就名", { exact: true }).fill("欢迎来到德鲁斯肯瓦尔德");
+  await dm.getByLabel("描述", { exact: true }).fill("来到德鲁斯肯瓦尔德");
+  await dm
+    .getByLabel("配图链接", { exact: true })
+    .fill("https://images.example.org/landscape.png");
+  await dm.getByRole("button", { name: "保存", exact: true }).click();
   await expect(
     player.getByRole("heading", {
       name: "欢迎来到德鲁斯肯瓦尔德",
@@ -243,9 +281,17 @@ test("native SDK shares warehouse, notes, direct gallery selection and room usag
   await expect(
     player.getByRole("heading", { name: "下一段旅程", exact: true }),
   ).toBeVisible();
+  await expect(other.locator(".achievement-card")).toHaveCount(0);
   await page.reload();
   await player.getByRole("button", { name: /^成就/ }).click();
   await expect(
     player.getByRole("heading", { name: "下一段旅程", exact: true }),
   ).toBeVisible();
+  await other.getByRole("button", { name: /^成就/ }).click();
+  await expect(other.locator(".achievement-card")).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("native-test-other-metadata"),
+    ),
+  ).toBeNull();
 });

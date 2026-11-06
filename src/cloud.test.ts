@@ -220,8 +220,23 @@ it("copies to an empty cloud library, preserves its source, and refuses overwrit
   await expect(a.store.copyStorage(profile, lib)).rejects.toThrow("已有资料");
   await a.store.selectStorage(profile, lib);
   expect(a.store.state.entries[0].title).toBe("药水");
-  expect(a.store.state.achievements[0].title).toBe(WELCOME_ACHIEVEMENT.title);
+  expect(a.store.state.achievements).toEqual([]);
   await expect(a.store.copyStorage()).rejects.toThrow("原资料仍保留");
+});
+it("copies actual saved achievements and deletion markers without inventing a welcome card", async () => {
+  const a = room("copy-saved-achievements");
+  await connect(a.store);
+  await a.router.saveProfile(profile);
+  await a.store.save(WELCOME_ACHIEVEMENT);
+  const saved = a.store.state.achievements[0];
+  await a.driver.write({ [ACHIEVEMENT_PREFIX + "welcome-druskenvald"]: null });
+  const lib = await a.router.createLibrary(profile, "已保存成就复制目标");
+  await a.store.copyStorage(profile, lib);
+  await a.store.selectStorage(profile, lib);
+  expect(a.store.state.achievements).toEqual([saved]);
+  expect(
+    (await a.router.read())[ACHIEVEMENT_PREFIX + "welcome-druskenvald"],
+  ).toBeNull();
 });
 it("rejects stale cloud revisions atomically and never partially overwrites another writer", async () => {
   const lib = await cloudRequest(

@@ -233,7 +233,7 @@ it("opens the official gallery directly without uploading a local file", async (
     url: "https://images.example.org/uploaded.webp",
   });
   expect(assets.upload).not.toHaveBeenCalled();
-  expect(assets.pick).toHaveBeenCalledWith(false, "");
+  expect(assets.pick).toHaveBeenCalledWith(false, "", "CHARACTER");
   expect(room.write).not.toHaveBeenCalled();
 });
 it("reports all room metadata as UTF-8 bytes and updates when another plugin writes", async () => {
@@ -257,6 +257,26 @@ it("does not create a fake gallery entry when asset selection is cancelled", asy
   const room = hub(),
     store = new TeamStore(room.driver);
   expect(await store.pick()).toBeNull();
+  expect(room.write).not.toHaveBeenCalled();
+});
+it("reports plain-object picker failures and permits a later retry without writing room data", async () => {
+  const room = hub(),
+    store = new TeamStore(room.driver);
+  assets.pick.mockRejectedValueOnce({ message: "图库启动失败" });
+  await expect(store.pick()).rejects.toThrow(
+    "无法打开 Owlbear 图库：图库启动失败",
+  );
+  expect(room.write).not.toHaveBeenCalled();
+  assets.pick.mockResolvedValueOnce([
+    {
+      name: "重试图片",
+      image: { url: "https://images.example.org/retry.png" },
+    },
+  ]);
+  expect(await store.pick()).toEqual({
+    title: "重试图片",
+    url: "https://images.example.org/retry.png",
+  });
   expect(room.write).not.toHaveBeenCalled();
 });
 it("prevents binary/data URLs from entering real room storage", async () => {
@@ -418,31 +438,29 @@ it("drops private records on demotion and rejects an old GM editor without delet
   stop();
 });
 
-it("shows the welcome achievement to everyone without writing, and only permits the GM to edit or remove it", async () => {
+it("shares saved achievements within their room and only permits the GM to edit or remove them", async () => {
   const { room, gm } = privateRoom();
   const player = new TeamStore(room.driver);
   const stop1 = await connect(gm),
     stop2 = await connect(player);
-  expect(player.state.achievements).toEqual([WELCOME_ACHIEVEMENT]);
+  expect(player.state.achievements).toEqual([]);
   expect(room.write).not.toHaveBeenCalled();
+  await gm.save(WELCOME_ACHIEVEMENT);
+  await vi.waitFor(() => expect(player.state.achievements).toHaveLength(1));
+  const saved = gm.state.achievements[0];
   await expect(
-    player.save(
-      { ...WELCOME_ACHIEVEMENT, description: "篡改" },
-      WELCOME_ACHIEVEMENT,
-    ),
+    player.save({ ...WELCOME_ACHIEVEMENT, description: "篡改" }, saved),
   ).rejects.toThrow("只有 DM");
-  await expect(player.remove(WELCOME_ACHIEVEMENT)).rejects.toThrow("只有 DM");
+  await expect(player.remove(saved)).rejects.toThrow("只有 DM");
   // Changing the client-supplied kind cannot bypass the achievement guard.
-  await expect(player.save(item, WELCOME_ACHIEVEMENT)).rejects.toThrow(
-    "只有 DM",
-  );
+  await expect(player.save(item, saved)).rejects.toThrow("只有 DM");
   await gm.save(
     {
       ...WELCOME_ACHIEVEMENT,
       description: "团队抵达了新的旅程",
       quality: "稀有",
     },
-    WELCOME_ACHIEVEMENT,
+    saved,
   );
   await vi.waitFor(() =>
     expect(player.state.achievements[0].quality).toBe("稀有"),
@@ -450,9 +468,25 @@ it("shows the welcome achievement to everyone without writing, and only permits 
   expect(player.state.achievements[0].description).toBe("团队抵达了新的旅程");
   await gm.remove(gm.state.achievements[0]);
   await vi.waitFor(() => expect(player.state.achievements).toHaveLength(0));
-  expect(room.get()[ACHIEVEMENT_PREFIX + WELCOME_ACHIEVEMENT.id]).toBeNull();
+  expect(room.get()[ACHIEVEMENT_PREFIX + saved.id]).toBeNull();
   await player.refresh();
   expect(player.state.achievements).toHaveLength(0);
   stop1();
   stop2();
+});
+it("keeps a new real room empty and preserves saved achievements when reopening the original room", async () => {
+  const a = privateRoom();
+  const stopA = await connect(a.gm);
+  await a.gm.save(WELCOME_ACHIEVEMENT);
+  const saved = a.gm.state.achievements[0];
+  const b = privateRoom();
+  const stopB = await connect(b.gm);
+  expect(b.gm.state.achievements).toEqual([]);
+  expect(b.room.write).not.toHaveBeenCalled();
+  const reopened = new TeamStore(a.room.driver);
+  const stopReopened = await connect(reopened);
+  expect(reopened.state.achievements).toEqual([saved]);
+  stopA();
+  stopB();
+  stopReopened();
 });

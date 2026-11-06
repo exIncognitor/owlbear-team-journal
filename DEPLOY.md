@@ -1,5 +1,12 @@
 # Cloudflare Pages 部署
 
+## 发布候选 · v0.3.2 · 2026-11-06
+
+- 本地完成空房间默认成就修复与图库兼容调整，46 项逻辑/D1、14 组浏览器回归及完整构建通过；真实图库打开尚未确认，详情见 TEST-REPORT.md。
+- 上传包：`DEPLOY-READY-v0.3.2.zip`，13 个文件，SHA-256 为 `9210b92fefa07c38948ab6316df5ea58578d37d2f73c6db97035c54097af7e48`。已检查私钥未进入构建，复用原后端公钥与 D1 绑定，无数据迁移或清库。
+- 当前尚未上传 Cloudflare。浏览器连接读取现有标签连续超时；`wrangler whoami` 返回未登录。生产仍为下述 v0.3.1，不能把本地版本号视为线上已更新。
+- 任务 Git 恢复点：`5c40683e9abb43b09c52f676fdd78274f7f11b1a`。上传成功后沿用原安装链接；发布前用户房间不会自动获得本地修正。
+
 ## 当前发布 · 团队手记 v0.3.1 · 2026-11-05
 
 - 在原 Pages 项目 `owlbear-twisted-moon` 完成 Production Direct Upload，13/13 文件上传成功并显示 Success。安装地址仍为 https://owlbear-twisted-moon.pages.dev/manifest.json ，浏览器读取清单确认版本 0.3.1。

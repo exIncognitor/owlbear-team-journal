@@ -4,6 +4,8 @@ import {
   pack,
   readSnapshot,
   RECORD_PREFIX,
+  ACHIEVEMENT_PREFIX,
+  WELCOME_ACHIEVEMENT,
   safeImageUrl,
   unpack,
   validateEntry,
@@ -20,6 +22,22 @@ const note: Intel = {
   content: "我们记录下看见的事。".repeat(400),
   resolved: false,
 };
+it("only shows explicitly saved room achievements and keeps the welcome sample opt-in", async () => {
+  expect((await readSnapshot({})).achievements).toEqual([]);
+  expect((await readSnapshot({}, true, true)).achievements).toEqual([
+    WELCOME_ACHIEVEMENT,
+  ]);
+  const key = ACHIEVEMENT_PREFIX + WELCOME_ACHIEVEMENT.id;
+  const saved = {
+    ...WELCOME_ACHIEVEMENT,
+    description: "已经保存的欢迎成就",
+    rev: "saved",
+  };
+  expect((await readSnapshot({ [key]: saved })).achievements).toEqual([saved]);
+  expect(
+    (await readSnapshot({ [key]: null }, true, true)).achievements,
+  ).toEqual([]);
+});
 it("roundtrips compressed Chinese records under the shared budget", async () => {
   const packed = await pack(note);
   expect(JSON.stringify(packed).length).toBeLessThan(

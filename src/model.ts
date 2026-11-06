@@ -265,7 +265,7 @@ export async function unpack(raw: unknown): Promise<unknown> {
 export async function readSnapshot(
   metadata: Metadata,
   demo = false,
-  includeWelcome = true,
+  includeWelcome = false,
 ): Promise<Snapshot> {
   const state = emptySnapshot();
   state.entries = (
@@ -297,7 +297,7 @@ export async function readSnapshot(
         return entry;
       }),
   );
-  // Built-in welcome card needs no room write; an explicit tombstone removes it.
+  // Sample card is opt-in for the standalone demo, never seeded into real rooms.
   if (
     includeWelcome &&
     !Object.hasOwn(metadata, ACHIEVEMENT_PREFIX + WELCOME_ACHIEVEMENT.id)

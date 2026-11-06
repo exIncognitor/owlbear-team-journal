@@ -1,11 +1,5 @@
 import type { Driver, Identity } from "./store";
-import {
-  checkCapacity,
-  metadataBytes,
-  WELCOME_ACHIEVEMENT,
-  ACHIEVEMENT_PREFIX,
-  type Metadata,
-} from "./model";
+import { checkCapacity, metadataBytes, type Metadata } from "./model";
 import {
   SELECTION_KEY,
   SIGNAL_KEY,
@@ -342,10 +336,6 @@ export class StorageRouter implements Driver {
     const source = ownedData(await this.read());
     if (sourceVersion !== this.epoch)
       throw Error("当前资料库已变化，请重新确认复制来源");
-    const welcomeKey = ACHIEVEMENT_PREFIX + WELCOME_ACHIEVEMENT.id;
-    if (!Object.hasOwn(source, welcomeKey))
-      source[welcomeKey] =
-        this.current.mode === "room" ? WELCOME_ACHIEVEMENT : null;
     if (profile && library) {
       if (
         this.current.mode === "cloud" &&
