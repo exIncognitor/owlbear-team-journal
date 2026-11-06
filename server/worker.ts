@@ -2,6 +2,8 @@ import publicKey from "./admin-public.json";
 import { businessKey, digest } from "../src/cloud-protocol";
 import {
   validateEntry,
+  validateTransaction,
+  LEDGER_PREFIX,
   unpack,
   object,
   integer,
@@ -153,6 +155,10 @@ async function validateUpdate(update: Metadata) {
         throw new ApiError("资料类型或编号与存储位置不符");
       if (entry.kind === "art" && entry.visibility === "gm")
         throw new ApiError("DM 私密插画不能写入共享资料，请使用私密接口");
+    } else if (key.startsWith(LEDGER_PREFIX)) {
+      const transaction = validateTransaction(value);
+      if (key !== LEDGER_PREFIX + transaction.id)
+        throw new ApiError("流水编号不匹配");
     } else if (key === DISPLAY_KEY) {
       const display = object(value);
       if (

@@ -1,6 +1,15 @@
 # Cloudflare Pages 部署
 
-## 当前发布 · v0.3.4 · 2026-11-06
+## 当前发布 · v0.4.0 · 2026-11-06
+
+- 已发布物品数量快捷加减、收支与可选流水、资料和金钱草稿恢复、置顶/排序、最近删除恢复。遵循房间与云端的存储差异，成就仍仅 DM 可编辑和恢复，私密插画仍使用独立私密存储；未新增私密情报。
+- Git 恢复起点 `de656fab83b912e4098018ad8859cead589c7e15`。57 项逻辑/本地 D1 测试、17 组 Google Chrome 浏览器回归及 TypeScript/Vite/Worker 构建通过。
+- Chrome 在原 Pages 项目执行 Production Direct Upload，13/13 文件上传成功，控制台显示 Success。发布包 `DEPLOY-READY-v0.4.0.zip`，SHA-256 `6762d0f6bb6a30570ff423083495e5d5bcb8d96882ea33d0f885225df8fc9f9d`，管理私钥排除与原公钥匹配检查通过。
+- 10 个公开静态文件线上 SHA-256 与本地构建一致。清单为 0.4.0；D1 health 返回绑定有效；`panel.html?obrref=verification-v040` 跳转保留 obrref。核对结果保存在 `qa/v0.4.0/production-verification.json`。
+- Chrome 线上面板和真实 `The Bent Flair` 房间确认新收支表单、本机流水提示与最近删除入口。真实房间只打开表单并取消，金钱仍为 0，原 1 条情报与 0.26 kB 占用保持不变；未修改正式房间或云端战役数据。保存、恢复及双端权限流程由隔离的 Chrome/本地 D1 回归验证。
+- 安装地址仍为 https://owlbear-twisted-moon.pages.dev/manifest.json ，刷新整个 Owlbear 房间即可加载新版。发布及房间证据为 `qa/v0.4.0/deploy-success.jpg`、`room-updated.jpg`、`room-transaction.jpg`，仅本地保留。
+
+## 历史发布 · v0.3.4 · 2026-11-06
 
 - 团队金钱显示与编辑统一为铂金币、金币、银币、铜币四种，四列布局同步调整。旧 EP 记录按兼容数据保留，房间与云端之间复制时携带原记录。
 - 在用户改名后的 `owlbear-team-journal` 目录完成构建与回归，Git 远程为 `exIncognitor/owlbear-team-journal`。恢复起点为 `481cfcc8b23e32a1b80ed4440c56806a4a22eea8`。

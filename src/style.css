@@ -1130,3 +1130,48 @@ fieldset label select {
     transition: none !important;
   }
 }
+.quantity-actions {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+}
+.quantity-actions button {
+  min-width: 28px;
+  padding: 3px 7px;
+  font-size: 16px;
+}
+.draft-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #252113;
+  border: 1px solid #66512e;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+}
+.draft-banner span {
+  flex: 1;
+  font-size: 12px;
+}
+.history-list {
+  max-height: 390px;
+  overflow: auto;
+}
+.history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #303039;
+}
+.history-row small {
+  display: block;
+  margin-top: 5px;
+  color: #a3a3af;
+}
+.history-row span {
+  font-size: 12px;
+}

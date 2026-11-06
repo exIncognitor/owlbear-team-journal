@@ -1,5 +1,6 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { errorMessage } from "./errors";
+import { readLocal, writeLocal } from "./local-records";
 import {
   BrowserArtVault,
   CloudArtVault,
@@ -9,6 +10,11 @@ import { StorageRouter, ROUTE_PENDING, ROUTE_ERROR } from "./storage-router";
 import { STAMP_KEY, type CloudProfile, type Library } from "./cloud-protocol";
 import {
   COINS,
+  compareEntries,
+  LEDGER_PREFIX,
+  text,
+  type Transaction,
+  validateTransaction,
   ACHIEVEMENT_PREFIX,
   DISPLAY_KEY,
   PREFIX,
@@ -24,7 +30,7 @@ import {
   verifyRevision,
   type Artwork,
   type Coin,
-  type Draft,
+  type OrderedDraft as Draft,
   type Entry,
   type Metadata,
   type Snapshot,
@@ -52,6 +58,14 @@ export class TeamStore {
   private identity: Identity = { role: "PLAYER", roomId: "", playerId: "" };
   private vault?: PrivateArtVault;
   private vaultScope = "";
+  get localScope() {
+    return JSON.stringify([
+      this.identity.roomId,
+      this.identity.playerId,
+      this.identity.role,
+      this.storage?.scope ?? "room",
+    ]);
+  }
   get storage() {
     return this.driver instanceof StorageRouter ? this.driver : undefined;
   }
@@ -122,6 +136,9 @@ export class TeamStore {
     this.state = {
       ...this.state,
       role: identity.role,
+      trash: [],
+      ledger: [],
+      localScope: this.localScope,
       entries: this.state.entries.filter(
         (e) => e.kind !== "art" || e.visibility !== "gm",
       ),
@@ -143,7 +160,7 @@ export class TeamStore {
     }
     state.role = this.identity.role;
     // Public data wins if a previous hide attempt was not acknowledged.
-    const ids = new Set(state.entries.map((e) => e.id));
+    const ids = new Set([...state.entries, ...state.trash].map((e) => e.id));
     const vault = this.vault;
     const privateArt = ((await vault?.read()) ?? []).filter(
       (e) => !ids.has(e.id),
@@ -152,8 +169,42 @@ export class TeamStore {
     state.privateArtMessage = vault?.message ?? "";
     state.entries = [
       ...state.entries.filter((e) => e.kind !== "art" || e.visibility !== "gm"),
-      ...privateArt,
-    ].sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+      ...privateArt.filter((e) => e.deletedAt == null),
+    ].sort(compareEntries);
+    state.localScope = this.localScope;
+    let localTrash: Entry[] = [];
+    if (this.storage?.info().mode !== "cloud") {
+      try {
+        localTrash = readLocal<Entry[]>(this.localScope, "trash", []).map((e) =>
+          validateEntry(e, this.demo),
+        );
+        state.ledger = [
+          ...state.ledger,
+          ...readLocal<Transaction[]>(this.localScope, "ledger", []).map(
+            validateTransaction,
+          ),
+        ].sort((a, b) => b.at - a.at);
+      } catch {
+        state.localWarning =
+          "本机辅助记录暂不可读；共享资料仍可使用，原本机数据已保留。";
+      }
+    }
+    state.trash = [
+      ...state.trash.filter((e) => e.kind !== "art" || e.visibility !== "gm"),
+      ...privateArt.filter((e) => e.deletedAt != null),
+      ...localTrash.filter(
+        (e) =>
+          !ids.has(e.id) &&
+          !privateArt.some((privateEntry) => privateEntry.id === e.id),
+      ),
+    ]
+      .filter(
+        (e) =>
+          state.role === "GM" ||
+          (e.kind !== "achievement" &&
+            !(e.kind === "art" && e.visibility === "gm")),
+      )
+      .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
     return state;
   }
   private async receive(metadata: Metadata, lifecycle: number) {
@@ -293,7 +344,10 @@ export class TeamStore {
     let operationVault: PrivateArtVault | undefined;
     const entry = validateEntry(
       {
+        pinned: previous?.pinned,
+        order: previous?.order,
         ...draft,
+        deletedAt: undefined,
         id: previous?.id ?? crypto.randomUUID(),
         rev: crypto.randomUUID(),
         updatedAt: Date.now(),
@@ -311,6 +365,8 @@ export class TeamStore {
           current.role !== "GM"
         )
           throw Error("只有 DM 可以编辑成就");
+        if (existing && existing.kind !== entry.kind)
+          throw Error("资料类型不可变更");
         verifyRevision(existing, previous?.rev);
         if (entry.kind === "art" && entry.visibility === "gm") {
           if (current.role !== "GM" || !operationVault)
@@ -363,13 +419,42 @@ export class TeamStore {
         if (previous.kind === "art" && previous.visibility === "gm") {
           if (current.role !== "GM" || !this.vault)
             throw Error("只有 DM 可以修改私密插画");
-          await this.clearPrivate(this.vault, previous.id, previous);
+          const entries = await this.vault.read();
+          verifyRevision(
+            entries.find((e) => e.id === previous.id),
+            previous.rev,
+          );
+          await this.vault.write(
+            entries.map((e) =>
+              e.id === previous.id
+                ? { ...e, deletedAt: Date.now(), rev: crypto.randomUUID() }
+                : e,
+            ),
+            entries,
+          );
           return {};
+        }
+        const deleted = {
+          ...existing!,
+          deletedAt: Date.now(),
+          rev: crypto.randomUUID(),
+        };
+        const cloud = this.storage?.info().mode === "cloud";
+        if (!cloud) {
+          const records = readLocal<Entry[]>(this.localScope, "trash", []);
+          writeLocal(
+            this.localScope,
+            "trash",
+            [deleted, ...records.filter((e) => e.id !== deleted.id)].slice(
+              0,
+              50,
+            ),
+          );
         }
         const update: Metadata = {
           [(existing?.kind === "achievement"
             ? ACHIEVEMENT_PREFIX
-            : RECORD_PREFIX) + previous.id]: null,
+            : RECORD_PREFIX) + previous.id]: cloud ? await pack(deleted) : null,
         };
         if (current.shownId === previous.id) update[DISPLAY_KEY] = { id: null };
         return update;
@@ -399,18 +484,131 @@ export class TeamStore {
       entries,
     );
   }
-  money(values: Record<Coin, number>, base: Snapshot["money"]) {
-    return this.mutate((_metadata, current) => {
-      const update: Metadata = {};
-      for (const coin of COINS) {
-        const value = integer(values[coin], coin);
-        if (value === base[coin].value) continue;
-        if (current.money[coin].rev !== base[coin].rev)
-          throw Error("金钱已被队友修改。请取消后重新打开金钱编辑器。");
-        update[moneyKey(coin)] = { value, rev: crypto.randomUUID() };
+  adjustQuantity(previous: Entry, delta: number) {
+    if (previous.kind !== "item" || ![1, -1].includes(delta))
+      return Promise.reject(Error("数量操作无效"));
+    return this.save(
+      { ...previous, quantity: previous.quantity + delta },
+      previous,
+    );
+  }
+  restore(previous: Entry) {
+    return this.mutate(async (metadata, current) => {
+      const deleted = current.trash.find((e) => e.id === previous.id);
+      verifyRevision(deleted, previous.rev);
+      if (!deleted) throw Error("回收记录已不存在");
+      if (deleted.kind === "achievement" && current.role !== "GM")
+        throw Error("只有 DM 可以恢复成就");
+      const key =
+        (deleted.kind === "achievement" ? ACHIEVEMENT_PREFIX : RECORD_PREFIX) +
+        deleted.id;
+      const restored = validateEntry(
+        {
+          ...deleted,
+          deletedAt: undefined,
+          updatedAt: Date.now(),
+          rev: crypto.randomUUID(),
+        },
+        this.demo,
+      );
+      if (restored.kind === "art" && restored.visibility === "gm") {
+        if (current.role !== "GM" || !this.vault)
+          throw Error("只有 DM 可以恢复私密插画");
+        const entries = await this.vault.read();
+        verifyRevision(
+          entries.find((e) => e.id === restored.id),
+          previous.rev,
+        );
+        await this.vault.write(
+          entries.map((e) => (e.id === restored.id ? restored : e)),
+          entries,
+        );
+        return {};
       }
-      return update;
+      if (
+        [...current.entries, ...current.achievements].some(
+          (e) => e.id === restored.id,
+        )
+      )
+        throw Error("同编号资料已存在，未覆盖现有记录");
+      return { [key]: this.demo ? restored : await pack(restored) };
     });
+  }
+  money(
+    values: Record<Coin, number>,
+    base: Snapshot["money"],
+    reason = "余额调整",
+    record = true,
+  ) {
+    return this.changeMoney(values, base, false, reason, record);
+  }
+  transact(
+    values: Record<Coin, number>,
+    base: Snapshot["money"],
+    reason: string,
+    record = true,
+  ) {
+    return this.changeMoney(values, base, true, reason, record);
+  }
+  private changeMoney(
+    values: Record<Coin, number>,
+    base: Snapshot["money"],
+    relative: boolean,
+    reason: string,
+    record: boolean,
+  ) {
+    let localTransaction: Transaction | undefined;
+    const scope = this.localScope;
+    return this.mutate(
+      (_metadata, current) => {
+        const update: Metadata = {};
+        const changes: Transaction["changes"] = {};
+        for (const coin of COINS) {
+          if (!Number.isSafeInteger(values[coin])) throw Error("金额须为整数");
+          const value = integer(
+            relative ? base[coin].value + values[coin] : values[coin],
+            coin,
+          );
+          if (value === base[coin].value) continue;
+          if (current.money[coin].rev !== base[coin].rev)
+            throw Error("金钱已被队友修改。请取消后重新打开金钱编辑器。");
+          update[moneyKey(coin)] = { value, rev: crypto.randomUUID() };
+          changes[coin] = value - current.money[coin].value;
+        }
+        if (record && Object.keys(changes).length) {
+          const transaction: Transaction = {
+            id: crypto.randomUUID(),
+            at: Date.now(),
+            reason: text(reason, "收支原因", 200, true),
+            changes,
+          };
+          if (this.storage?.info().mode === "cloud") {
+            update[LEDGER_PREFIX + transaction.id] = transaction;
+            for (const old of current.ledger.slice(99))
+              update[LEDGER_PREFIX + old.id] = null;
+          } else localTransaction = transaction;
+        }
+        return update;
+      },
+      () => {
+        if (localTransaction) {
+          try {
+            writeLocal(
+              scope,
+              "ledger",
+              [
+                localTransaction,
+                ...readLocal<Transaction[]>(scope, "ledger", []),
+              ].slice(0, 100),
+            );
+          } catch {
+            throw Error(
+              "余额已更新，但本机流水保存失败。请勿重复提交收支，先核对余额。",
+            );
+          }
+        }
+      },
+    );
   }
   show(id: string | null) {
     return this.mutate((_metadata, current) => {

@@ -174,7 +174,7 @@ for (const width of [390, 760])
       .fill("键盘和滚动均可编辑。");
     await page.getByRole("button", { name: "保存", exact: true }).click();
     await page.getByRole("button", { name: /^团队仓库/ }).click();
-    await page.screenshot({ path: `qa/v0.3.4/panel-${width}.png` });
+    await page.screenshot({ path: `qa/v0.4.0/panel-${width}.png` });
   });
 
 for (const width of [390, 760])
@@ -201,7 +201,7 @@ for (const width of [390, 760])
       iconBox = await card.locator(".achievement-icon").boundingBox();
     expect(iconBox!.width).toBeLessThan(cardBox!.width / 4);
     expect(cardBox!.width / cardBox!.height).toBeGreaterThan(2.3);
-    await page.screenshot({ path: `qa/v0.3.4/achievements-${width}.png` });
+    await page.screenshot({ path: `qa/v0.4.0/achievements-${width}.png` });
   });
 
 test("compact journal header and book manifest keep the native action and only two artwork import methods", async ({
@@ -223,10 +223,10 @@ test("compact journal header and book manifest keep the native action and only t
   ]);
   const manifest = await (await page.request.get("/manifest.json")).json();
   expect(manifest.name).toBe("团队手记");
-  expect(manifest.version).toBe("0.3.4");
+  expect(manifest.version).toBe("0.4.0");
   expect(manifest.action).toMatchObject({
     title: "团队手记",
-    icon: "/icon.svg?v=0.3.4",
+    icon: "/icon.svg?v=0.4.0",
     popover: "/panel.html",
     width: 760,
     height: 700,
@@ -256,7 +256,7 @@ for (const width of [390, 1440])
       ),
     ).toBe(true);
     await page.screenshot({
-      path: `qa/v0.3.4/home-${width}.png`,
+      path: `qa/v0.4.0/home-${width}.png`,
       fullPage: true,
     });
   });

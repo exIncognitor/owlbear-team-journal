@@ -4,6 +4,7 @@ import OBR from "@owlbear-rodeo/sdk";
 import { errorMessage } from "./errors";
 import { createStore } from "./store";
 import { StorageSettings } from "./StorageSettings";
+import { readLocal, writeLocal, clearLocal } from "./local-records";
 import {
   COINS,
   COIN_LABELS,
@@ -12,7 +13,7 @@ import {
   emptySnapshot,
   type Artwork,
   type Coin,
-  type Draft,
+  type OrderedDraft as Draft,
   type Entry,
   type Intel,
   type Item,
@@ -23,6 +24,14 @@ import "./style.css";
 const store = createStore();
 type Tab = "item" | "intel" | "art" | "achievement";
 type Editor = { draft: Draft; previous?: Entry };
+type MoneyDraft = {
+  kind: "balance" | "transaction";
+  base: Snapshot["money"];
+  values: Record<Coin, number>;
+  direction: number;
+  reason: string;
+  record: boolean;
+};
 function Book({ size = 28 }: { size?: number }) {
   return (
     <svg
@@ -126,9 +135,11 @@ function fresh(kind: Tab, role: Snapshot["role"] = "PLAYER"): Draft {
 function Picture({
   art,
   className = "",
+  retry = true,
 }: {
   art: Pick<Artwork, "url" | "title">;
   className?: string;
+  retry?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [art.url]);
@@ -136,9 +147,11 @@ function Picture({
     <div className={`image-fallback ${className}`}>
       <Symbol kind="art" />
       <span>图片暂时无法加载</span>
-      <button type="button" onClick={() => setFailed(false)}>
-        重试
-      </button>
+      {retry && (
+        <button type="button" onClick={() => setFailed(false)}>
+          重试
+        </button>
+      )}
     </div>
   ) : (
     <img
@@ -198,6 +211,18 @@ function App() {
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState<"trash" | "ledger" | null>(
+    null,
+  );
+  const [savedDraft, setSavedDraft] = useState<Editor | null>(null);
+  const [draftWarning, setDraftWarning] = useState("");
+  const [transactionOpen, setTransactionOpen] = useState<
+    Snapshot["money"] | null
+  >(null);
+  const [savedMoneyDraft, setSavedMoneyDraft] = useState<MoneyDraft | null>(
+    null,
+  );
+  const [financialDraft, setFinancialDraft] = useState<MoneyDraft | null>(null);
   const lock = useRef(false);
   useEffect(() => store.subscribe(setState), []);
   useEffect(() => {
@@ -225,13 +250,77 @@ function App() {
         : previous,
     );
     setView(null);
+    setSavedDraft(null);
+    setHistoryOpen(null);
+    setTransactionOpen(null);
   }, [state.role]);
   useEffect(() => {
     setEditor(null);
     setMoneyEditor(null);
     setView(null);
+    setHistoryOpen(null);
+    setTransactionOpen(null);
+    setSavedDraft(null);
+    setDraftWarning("");
+    setSavedMoneyDraft(null);
+    setFinancialDraft(null);
     if (state.role !== "GM") setStorageOpen(false);
-  }, [state.storage?.scope, state.role]);
+    if (!state.ready || !state.localScope) return;
+    try {
+      const saved = readLocal<Editor | null>(state.localScope, "draft", null);
+      if (
+        saved &&
+        (!["item", "intel", "art", "achievement"].includes(saved.draft?.kind) ||
+          typeof saved.draft?.title !== "string")
+      )
+        throw Error("本机草稿格式错误");
+      setSavedDraft(saved);
+      setSavedMoneyDraft(
+        readLocal<MoneyDraft | null>(state.localScope, "money-draft", null),
+      );
+    } catch {
+      setDraftWarning("无法读取本机草稿，请检查浏览器存储权限。");
+    }
+  }, [state.localScope, state.ready, state.role]);
+  function rememberDraft(draft: Draft) {
+    if (!editor || !state.localScope) return;
+    const saved = { ...editor, draft };
+    try {
+      writeLocal(state.localScope, "draft", saved);
+      setSavedDraft(saved);
+      setDraftWarning("");
+    } catch {
+      setDraftWarning("草稿未能保存到本机；关闭或刷新页面可能丢失未提交内容。");
+    }
+  }
+  function forgetDraft() {
+    if (state.localScope) {
+      try {
+        clearLocal(state.localScope, "draft");
+        setSavedDraft(null);
+      } catch {
+        setDraftWarning("资料已处理，但旧草稿未能清除。");
+      }
+    }
+  }
+  function rememberMoneyDraft(draft: MoneyDraft) {
+    if (!state.localScope) return;
+    try {
+      writeLocal(state.localScope, "money-draft", draft);
+      setSavedMoneyDraft(draft);
+    } catch {
+      setDraftWarning("金钱草稿未能保存到本机，刷新可能丢失未提交内容。");
+    }
+  }
+  function forgetMoneyDraft() {
+    if (!state.localScope) return;
+    try {
+      clearLocal(state.localScope, "money-draft");
+      setSavedMoneyDraft(null);
+    } catch {
+      setDraftWarning("余额已处理，但旧金钱草稿未能清除，请勿重复提交收支。");
+    }
+  }
   useEffect(() => {
     if (!store.demo)
       OBR.onReady(() => {
@@ -239,7 +328,7 @@ function App() {
         void OBR.action.setHeight(700).catch((e) => setError(String(e)));
         void OBR.action.setTitle("团队手记").catch((e) => setError(String(e)));
         void OBR.action
-          .setIcon("/icon.svg?v=0.3.4")
+          .setIcon("/icon.svg?v=0.4.0")
           .catch((e) => setError(String(e)));
       });
   }, []);
@@ -396,6 +485,63 @@ function App() {
             {notice}
           </div>
         )}
+        {state.localWarning && (
+          <p className="alert" role="alert">
+            {state.localWarning}
+          </p>
+        )}
+        {draftWarning && (
+          <p className="alert" role="alert">
+            {draftWarning}
+          </p>
+        )}
+        {savedMoneyDraft && !moneyEditor && !transactionOpen && state.ready && (
+          <div className="draft-banner">
+            <span>有未保存的金钱草稿（仅本机）</span>
+            <button
+              className="quiet"
+              onClick={() => {
+                setFinancialDraft(savedMoneyDraft);
+                setError("");
+                if (savedMoneyDraft.kind === "balance")
+                  setMoneyEditor(savedMoneyDraft.base);
+                else setTransactionOpen(savedMoneyDraft.base);
+              }}
+            >
+              继续金钱草稿
+            </button>
+            <button className="quiet" onClick={forgetMoneyDraft}>
+              丢弃金钱草稿
+            </button>
+          </div>
+        )}
+        {savedDraft &&
+          !editor &&
+          state.ready &&
+          (state.role === "GM" ||
+            (savedDraft.draft.kind !== "achievement" &&
+              !(
+                savedDraft.draft.kind === "art" &&
+                savedDraft.draft.visibility === "gm"
+              ))) && (
+            <div className="draft-banner">
+              <span>
+                有未保存草稿：{savedDraft.draft.title || "未命名资料"}（仅本机）
+              </span>
+              <button
+                className="quiet"
+                onClick={() => {
+                  setEditor(savedDraft);
+                  setError("");
+                }}
+              >
+                继续编辑草稿
+              </button>
+              <button className="quiet" onClick={forgetDraft}>
+                丢弃草稿
+              </button>
+            </div>
+          )}
         {!state.ready && !state.error && (
           <p className="empty">正在连接团队资料…</p>
         )}
@@ -406,14 +552,36 @@ function App() {
                 <p className="eyebrow">PARTY TREASURY</p>
                 <h2>团队金钱</h2>
               </div>
-              <button
-                className="quiet"
-                disabled={busy || !state.ready}
-                onClick={() => setMoneyEditor(structuredClone(state.money))}
-              >
-                <Symbol kind="edit" />
-                调整金钱
-              </button>
+              <div className="actions">
+                <button
+                  className="quiet"
+                  disabled={busy || !state.ready}
+                  onClick={() => {
+                    setFinancialDraft(null);
+                    setTransactionOpen(structuredClone(state.money));
+                  }}
+                >
+                  记一笔收支
+                </button>
+                <button
+                  className="quiet"
+                  disabled={busy || !state.ready}
+                  onClick={() => setHistoryOpen("ledger")}
+                >
+                  收支流水
+                </button>
+                <button
+                  className="quiet"
+                  disabled={busy || !state.ready}
+                  onClick={() => {
+                    setFinancialDraft(null);
+                    setMoneyEditor(structuredClone(state.money));
+                  }}
+                >
+                  <Symbol kind="edit" />
+                  调整金钱
+                </button>
+              </div>
             </div>
             <div className="coin-grid">
               {COINS.map((c) => (
@@ -447,7 +615,7 @@ function App() {
                   aria-label={`查看大图：${shown.title}`}
                   onClick={() => setView(shown)}
                 >
-                  <Picture art={shown} />
+                  <Picture art={shown} retry={false} />
                 </button>
                 <div className="stage-caption">
                   <div>
@@ -602,7 +770,10 @@ function App() {
                 </div>
                 <div className="item-info">
                   <div className="item-title">
-                    <h3>{entry.title}</h3>
+                    <h3>
+                      {entry.pinned && <span title="已置顶">★ </span>}
+                      {entry.title}
+                    </h3>
                     <span className="tag">{entry.category}</span>
                   </div>
                   {entry.description && <p>{entry.description}</p>}
@@ -613,6 +784,26 @@ function App() {
                 <div className="quantity">
                   <strong>{entry.quantity}</strong>
                   <span>数量</span>
+                  <div className="quantity-actions">
+                    <button
+                      className="quiet"
+                      aria-label={`减少数量：${entry.title}`}
+                      disabled={busy || !state.ready || entry.quantity === 0}
+                      onClick={() => run(() => store.adjustQuantity(entry, -1))}
+                    >
+                      −
+                    </button>
+                    <button
+                      className="quiet"
+                      aria-label={`增加数量：${entry.title}`}
+                      disabled={
+                        busy || !state.ready || entry.quantity >= 999999
+                      }
+                      onClick={() => run(() => store.adjustQuantity(entry, 1))}
+                    >
+                      ＋
+                    </button>
+                  </div>
                 </div>
                 <button
                   className="icon-button"
@@ -645,7 +836,10 @@ function App() {
                     <Symbol kind="edit" />
                   </button>
                 </div>
-                <h3>{entry.title}</h3>
+                <h3>
+                  {entry.pinned && <span title="已置顶">★ </span>}
+                  {entry.title}
+                </h3>
                 <p className="intel-body">{entry.content}</p>
                 <button
                   className="resolve-button"
@@ -674,7 +868,10 @@ function App() {
                 </div>
                 <div className="achievement-copy">
                   <div className="achievement-title">
-                    <h3>{entry.title}</h3>
+                    <h3>
+                      {entry.pinned && <span title="已置顶">★ </span>}
+                      {entry.title}
+                    </h3>
                     <span className="quality-badge">{entry.quality}</span>
                   </div>
                   <p>{entry.description}</p>
@@ -708,7 +905,7 @@ function App() {
                   aria-label={`查看大图：${entry.title}`}
                   onClick={() => setView(entry)}
                 >
-                  <Picture art={entry} />
+                  <Picture art={entry} retry={false} />
                   {state.shownId === entry.id && (
                     <span className="display-badge">正在展示</span>
                   )}
@@ -721,7 +918,10 @@ function App() {
                       ? `仅 DM 可见 · ${state.privateArtStorage === "cloud" ? "云端" : "本机"}`
                       : "玩家可见"}
                   </span>
-                  <h3>{entry.title}</h3>
+                  <h3>
+                    {entry.pinned && <span title="已置顶">★ </span>}
+                    {entry.title}
+                  </h3>
                   {entry.caption && <p>{entry.caption}</p>}
                   <div className="art-actions">
                     <button
@@ -803,6 +1003,13 @@ function App() {
         )}
       </section>
       <footer className="app-footer">
+        <button
+          className="quiet"
+          disabled={busy || !state.ready}
+          onClick={() => setHistoryOpen("trash")}
+        >
+          最近删除（{state.trash.length}）
+        </button>
         <span>
           <span className={"live-dot " + (!state.ready ? "offline" : "")} />
           {state.ready
@@ -831,6 +1038,7 @@ function App() {
           }}
         >
           <EntryEditor
+            onDraftChange={rememberDraft}
             isGM={state.role === "GM"}
             editor={editor}
             busy={busy}
@@ -842,6 +1050,7 @@ function App() {
             onSave={(draft) =>
               run(async () => {
                 await store.save(draft, editor.previous);
+                forgetDraft();
                 setEditor(null);
                 setNotice("资料已保存");
               })
@@ -849,6 +1058,7 @@ function App() {
             onDelete={() =>
               run(async () => {
                 await store.remove(editor.previous!);
+                forgetDraft();
                 setEditor(null);
                 setNotice("条目已移除");
               })
@@ -891,6 +1101,17 @@ function App() {
           }}
         >
           <MoneyEditor
+            initialValues={financialDraft?.values}
+            onDraftChange={(values) =>
+              rememberMoneyDraft({
+                kind: "balance",
+                base: moneyEditor,
+                values,
+                direction: 1,
+                reason: "余额调整",
+                record: true,
+              })
+            }
             base={moneyEditor}
             busy={busy}
             error={error}
@@ -901,11 +1122,125 @@ function App() {
             onSave={(values) =>
               run(async () => {
                 await store.money(values, moneyEditor);
+                forgetMoneyDraft();
                 setMoneyEditor(null);
                 setNotice("团队金钱已更新");
               })
             }
           />
+        </Modal>
+      )}
+      {transactionOpen && (
+        <Modal
+          label="记录收支"
+          locked={busy}
+          onClose={() => {
+            if (!busy) setTransactionOpen(null);
+          }}
+        >
+          <TransactionEditor
+            busy={busy}
+            error={error}
+            cloud={state.storage?.mode === "cloud"}
+            initial={financialDraft}
+            onDraftChange={(draft) =>
+              rememberMoneyDraft({
+                ...draft,
+                kind: "transaction",
+                base: transactionOpen,
+              })
+            }
+            onCancel={() => setTransactionOpen(null)}
+            onSave={(values, reason, record) =>
+              run(async () => {
+                await store.transact(values, transactionOpen, reason, record);
+                forgetMoneyDraft();
+                setTransactionOpen(null);
+                setNotice("收支已记录");
+              })
+            }
+          />
+        </Modal>
+      )}
+      {historyOpen && (
+        <Modal
+          label={historyOpen === "trash" ? "最近删除" : "收支流水"}
+          locked={busy}
+          onClose={() => {
+            if (!busy) setHistoryOpen(null);
+          }}
+        >
+          <h2>{historyOpen === "trash" ? "最近删除" : "收支流水"}</h2>
+          <p className="gallery-note">
+            {historyOpen === "trash"
+              ? state.storage?.mode === "cloud"
+                ? "云端共享回收记录；私密插画仍仅 DM 可见。恢复不会覆盖已有条目。"
+                : "共享条目的回收副本仅保存在删除者当前浏览器，最近 50 条；私密插画留在 DM 本机私密存储。清除网站数据会丢失本机副本。"
+              : state.storage?.mode === "cloud"
+                ? "全队可见的云端流水，保留最近 100 笔。"
+                : "仅本账号、此房间、当前浏览器的流水，保留最近 100 笔；不占房间共享空间。"}
+          </p>
+          {error && (
+            <p role="alert" className="alert">
+              {error}
+            </p>
+          )}
+          <div className="history-list">
+            {historyOpen === "trash"
+              ? state.trash.map((entry) => (
+                  <article className="history-row" key={entry.id}>
+                    <div>
+                      <strong>{entry.title}</strong>
+                      <small>
+                        {new Date(entry.deletedAt!).toLocaleString()}
+                        {entry.kind === "art" && entry.visibility === "gm"
+                          ? " · 仅 DM 可见"
+                          : ""}
+                      </small>
+                    </div>
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        run(async () => {
+                          await store.restore(entry);
+                          setNotice("条目已恢复");
+                        })
+                      }
+                    >
+                      恢复
+                    </button>
+                  </article>
+                ))
+              : state.ledger.map((record) => (
+                  <article className="history-row" key={record.id}>
+                    <div>
+                      <strong>{record.reason}</strong>
+                      <small>{new Date(record.at).toLocaleString()}</small>
+                    </div>
+                    <span>
+                      {COINS.filter((c) => record.changes[c])
+                        .map(
+                          (c) =>
+                            `${COIN_LABELS[c]} ${(record.changes[c] ?? 0) > 0 ? "+" : ""}${record.changes[c]}`,
+                        )
+                        .join(" · ")}
+                    </span>
+                  </article>
+                ))}
+            {(historyOpen === "trash"
+              ? !state.trash.length
+              : !state.ledger.length) && <p className="empty">暂无记录</p>}
+          </div>
+          <div className="form-actions">
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => setHistoryOpen(null)}
+            >
+              关闭
+            </button>
+          </div>
         </Modal>
       )}
       {view && (
@@ -931,6 +1266,7 @@ function App() {
   );
 }
 function EntryEditor({
+  onDraftChange,
   isGM,
   editor,
   busy,
@@ -939,6 +1275,7 @@ function EntryEditor({
   onSave,
   onDelete,
 }: {
+  onDraftChange: (draft: Draft) => void;
   isGM: boolean;
   editor: Editor;
   busy: boolean;
@@ -949,8 +1286,11 @@ function EntryEditor({
 }) {
   const [draft, setDraft] = useState<Draft>(editor.draft),
     [confirm, setConfirm] = useState(false);
-  const update = (key: string, value: string | number | boolean) =>
-    setDraft((previous) => ({ ...previous, [key]: value }) as Draft);
+  const update = (key: string, value: string | number | boolean) => {
+    const next = { ...draft, [key]: value } as Draft;
+    setDraft(next);
+    onDraftChange(next);
+  };
   const label =
     draft.kind === "item"
       ? "物品"
@@ -979,6 +1319,37 @@ function EntryEditor({
         </p>
       )}
       <fieldset disabled={busy}>
+        <div className="form-row">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={!!draft.pinned}
+              onChange={(e) => update("pinned", e.target.checked)}
+            />
+            置顶
+          </label>
+          <label>
+            排序（越小越靠前）
+            <input
+              aria-label="排序"
+              type="number"
+              min="0"
+              max="999999"
+              step="1"
+              required
+              value={Number.isNaN(draft.order) ? "" : (draft.order ?? 0)}
+              onChange={(e) =>
+                update(
+                  "order",
+                  e.target.value === "" ? NaN : Number(e.target.value),
+                )
+              }
+            />
+          </label>
+        </div>
+        <p className="gallery-note">
+          置顶条目优先；同组按排序值升序，相同值按最近更新。未保存修改会留在本机草稿中。
+        </p>
         <label>
           {draft.kind === "item"
             ? "名称"
@@ -1018,7 +1389,7 @@ function EntryEditor({
                   min="0"
                   max="999999"
                   step="1"
-                  value={Number.isNaN(draft.quantity) ? "" : draft.quantity}
+                  value={Number.isFinite(draft.quantity) ? draft.quantity : ""}
                   onChange={(e) =>
                     update(
                       "quantity",
@@ -1040,6 +1411,7 @@ function EntryEditor({
             <label>
               物品说明
               <textarea
+                aria-label="物品说明"
                 rows={4}
                 maxLength={1200}
                 value={draft.description}
@@ -1076,6 +1448,7 @@ function EntryEditor({
             <label>
               情报正文
               <textarea
+                aria-label="情报正文"
                 required
                 rows={8}
                 maxLength={5000}
@@ -1127,6 +1500,7 @@ function EntryEditor({
             <label>
               插画说明
               <textarea
+                aria-label="插画说明"
                 rows={3}
                 maxLength={1000}
                 value={draft.caption}
@@ -1196,7 +1570,7 @@ function EntryEditor({
               确认移除「{editor.previous?.title}」？
               {draft.kind === "art"
                 ? "原图库图片会保留。"
-                : "需要保留时，请先取消。"}
+                : "移除后可在「最近删除」恢复。"}
             </p>
             <button
               type="button"
@@ -1236,13 +1610,139 @@ function EntryEditor({
     </form>
   );
 }
+function TransactionEditor({
+  busy,
+  error,
+  cloud,
+  initial,
+  onDraftChange,
+  onCancel,
+  onSave,
+}: {
+  initial: MoneyDraft | null;
+  onDraftChange: (draft: Omit<MoneyDraft, "kind" | "base">) => void;
+  busy: boolean;
+  error: string;
+  cloud: boolean;
+  onCancel: () => void;
+  onSave: (
+    values: Record<Coin, number>,
+    reason: string,
+    record: boolean,
+  ) => Promise<void>;
+}) {
+  const [direction, setDirection] = useState(initial?.direction ?? 1);
+  const [values, setValues] = useState(
+    initial?.values ??
+      (Object.fromEntries(COINS.map((c) => [c, 0])) as Record<Coin, number>),
+  );
+  const [reason, setReason] = useState(initial?.reason ?? "");
+  const [record, setRecord] = useState(initial?.record ?? true);
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) onDraftChange({ direction, values, reason, record });
+    started.current = true;
+  }, [direction, values, reason, record]);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!COINS.some((c) => values[c] > 0)) return;
+        void onSave(
+          Object.fromEntries(
+            COINS.map((c) => [c, direction * values[c]]),
+          ) as Record<Coin, number>,
+          reason,
+          record,
+        );
+      }}
+    >
+      <h2>记录收支</h2>
+      {error && (
+        <p className="alert" role="alert">
+          {error}
+        </p>
+      )}
+      <fieldset disabled={busy}>
+        <label>
+          收支类型
+          <select
+            value={direction}
+            onChange={(e) => setDirection(Number(e.target.value))}
+          >
+            <option value="1">收入</option>
+            <option value="-1">支出</option>
+          </select>
+        </label>
+        <div className="money-fields">
+          {COINS.map((c) => (
+            <label key={c}>
+              {COIN_LABELS[c]}
+              <input
+                type="number"
+                required
+                min="0"
+                max="999999999"
+                step="1"
+                value={Number.isFinite(values[c]) ? values[c] : ""}
+                onChange={(e) =>
+                  setValues({
+                    ...values,
+                    [c]: e.target.value === "" ? NaN : Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+          ))}
+        </div>
+        <label>
+          收支原因
+          <input
+            required
+            maxLength={200}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="例如：购买补给、任务报酬"
+          />
+        </label>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={record}
+            onChange={(e) => setRecord(e.target.checked)}
+          />
+          {cloud ? "保存到全队可见的云端流水" : "保存到本机流水"}
+        </label>
+        <p className="gallery-note">
+          各币种独立记账，不自动兑换。支出不能超过余额；多人同时修改时会提示重新核对。
+        </p>
+        <div className="form-actions">
+          <button type="button" className="secondary" onClick={onCancel}>
+            取消
+          </button>
+          <button
+            type="submit"
+            className="primary"
+            disabled={!COINS.some((c) => values[c] > 0)}
+          >
+            确认收支
+          </button>
+        </div>
+      </fieldset>
+    </form>
+  );
+}
 function MoneyEditor({
+  initialValues,
+  onDraftChange,
   base,
   busy,
   error,
   onCancel,
   onSave,
 }: {
+  initialValues?: Record<Coin, number>;
+  onDraftChange: (values: Record<Coin, number>) => void;
   base: Snapshot["money"];
   busy: boolean;
   error: string;
@@ -1251,11 +1751,17 @@ function MoneyEditor({
 }) {
   const [values, setValues] = useState(
     () =>
-      Object.fromEntries(COINS.map((c) => [c, base[c].value])) as Record<
+      initialValues ??
+      (Object.fromEntries(COINS.map((c) => [c, base[c].value])) as Record<
         Coin,
         number
-      >,
+      >),
   );
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) onDraftChange(values);
+    started.current = true;
+  }, [values]);
   return (
     <form
       onSubmit={(e) => {
@@ -1284,7 +1790,7 @@ function MoneyEditor({
                 max="999999999"
                 step="1"
                 required
-                value={Number.isNaN(values[c]) ? "" : values[c]}
+                value={Number.isFinite(values[c]) ? values[c] : ""}
                 onChange={(e) =>
                   setValues({
                     ...values,

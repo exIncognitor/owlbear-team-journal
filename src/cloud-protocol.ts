@@ -2,6 +2,7 @@ import {
   PREFIX,
   RECORD_PREFIX,
   ACHIEVEMENT_PREFIX,
+  LEDGER_PREFIX,
   DISPLAY_KEY,
   COINS,
   moneyKey,
@@ -37,7 +38,7 @@ export function businessKey(key: string) {
     // Preserve legacy EP records when copying existing room or cloud data.
     key === PREFIX + "money/ep" ||
     COINS.some((c) => key === moneyKey(c)) ||
-    [RECORD_PREFIX, ACHIEVEMENT_PREFIX].some(
+    [RECORD_PREFIX, ACHIEVEMENT_PREFIX, LEDGER_PREFIX].some(
       (prefix) =>
         key.startsWith(prefix) &&
         /^[a-zA-Z0-9-]{1,80}$/.test(key.slice(prefix.length)),

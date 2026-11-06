@@ -189,6 +189,43 @@ test("DM storage settings switch one room across two libraries and restore room 
     dm.getByRole("heading", { name: "云端 A 药水", exact: true }),
   ).toBeVisible();
   await addHidden("云端私密图", "https://images.example.org/cloud-private.svg");
+  await player
+    .getByRole("button", { name: "增加数量：云端 A 药水", exact: true })
+    .click();
+  await expect(dm.locator(".quantity strong")).toHaveText("2");
+  await player.getByRole("button", { name: "记一笔收支", exact: true }).click();
+  await player.getByLabel("金币", { exact: true }).fill("8");
+  await player.getByLabel("收支原因").fill("玩家领取报酬");
+  await player.getByRole("button", { name: "确认收支", exact: true }).click();
+  await expect(dm.getByLabel("金币余额", { exact: true })).toHaveText("8");
+  await dm.getByRole("button", { name: "收支流水", exact: true }).click();
+  await expect(dm.getByRole("dialog")).toContainText("玩家领取报酬");
+  await dm.getByRole("button", { name: "关闭", exact: true }).click();
+  await player
+    .getByRole("button", { name: "编辑云端 A 药水", exact: true })
+    .click();
+  await player.getByRole("button", { name: "移除条目", exact: true }).click();
+  await player.getByRole("button", { name: "确认移除", exact: true }).click();
+  await expect(
+    dm.getByRole("heading", { name: "云端 A 药水", exact: true }),
+  ).toHaveCount(0);
+  await dm.getByRole("button", { name: /^最近删除/ }).click();
+  await expect(dm.getByRole("dialog")).toContainText("云端 A 药水");
+  await dm.getByRole("button", { name: "恢复", exact: true }).click();
+  await dm.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(
+    player.getByRole("heading", { name: "云端 A 药水", exact: true }),
+  ).toBeVisible();
+  await player
+    .getByRole("button", { name: "编辑云端 A 药水", exact: true })
+    .click();
+  await player
+    .getByLabel("物品说明", { exact: true })
+    .fill("只属于 A 库的草稿");
+  await player.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(
+    player.getByRole("button", { name: "继续编辑草稿", exact: true }),
+  ).toBeVisible();
   await player.getByRole("button", { name: /^插画/ }).click();
   await expect(player.getByText("云端私密图", { exact: true })).toHaveCount(0);
   await player.getByRole("button", { name: /^团队仓库/ }).click();
@@ -203,6 +240,9 @@ test("DM storage settings switch one room across two libraries and restore room 
     .click();
   await expect(player.getByLabel("共享数据占用")).toContainText("短模组 B");
   await expect(
+    player.getByRole("button", { name: "继续编辑草稿", exact: true }),
+  ).toHaveCount(0);
+  await expect(
     player.getByRole("heading", { name: "云端 A 药水", exact: true }),
   ).toHaveCount(0);
   await dm.getByRole("button", { name: "存储设置", exact: true }).click();
@@ -214,9 +254,13 @@ test("DM storage settings switch one room across two libraries and restore room 
   await expect(
     player.getByRole("heading", { name: "云端 A 药水", exact: true }),
   ).toBeVisible();
+  await expect(
+    player.getByRole("button", { name: "继续编辑草稿", exact: true }),
+  ).toBeVisible();
+  await player.getByRole("button", { name: "丢弃草稿", exact: true }).click();
   await dm.getByRole("button", { name: "存储设置", exact: true }).click();
   await dm.getByLabel("存储来源").selectOption("room");
-  await page.screenshot({ path: "qa/v0.3.4/storage-settings.png" });
+  await page.screenshot({ path: "qa/v0.4.0/storage-settings.png" });
   await dm
     .getByRole("button", { name: "切换并保留原资料", exact: true })
     .click();
@@ -245,7 +289,7 @@ test("DM storage settings switch one room across two libraries and restore room 
   await expect(
     dm.getByText("仅 DM 可见 · 云端", { exact: true }),
   ).toBeVisible();
-  await page.screenshot({ path: "qa/v0.3.4/cloud-private.png" });
+  await page.screenshot({ path: "qa/v0.4.0/cloud-private.png" });
   await page.evaluate(() => localStorage.clear());
   await page
     .locator("#dm")

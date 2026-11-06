@@ -580,6 +580,109 @@ it("preserves public records on failed private saves, then publishes/hides/remov
   hidden = a.store.state.entries[0] as Artwork;
   await a.store.remove(hidden);
   expect(
-    (await cloudRequest(endpoint, path, "GET", undefined, profile)).entries,
-  ).toEqual([]);
+    (await cloudRequest(endpoint, path, "GET", undefined, profile)).entries[0]
+      .deletedAt,
+  ).toBeGreaterThan(0);
+  expect(a.store.state.entries).toHaveLength(0);
+  expect(a.store.state.trash).toHaveLength(1);
+  await a.store.restore(a.store.state.trash[0]);
+  expect(a.store.state.entries[0]).toMatchObject({
+    visibility: "gm",
+    title: hidden.title,
+  });
+  expect(a.store.state.trash).toHaveLength(0);
+});
+
+it("keeps cloud ledger and public recovery with the selected library and enforces member achievement restrictions", async () => {
+  const a = room("improvements-cloud");
+  await connect(a.store);
+  await a.router.saveProfile(profile);
+  const lib = await a.router.createLibrary(profile, "功能回归 A");
+  const libB = await a.router.createLibrary(profile, "功能回归 B");
+  await a.store.selectStorage(profile, lib);
+  const memberRouter = new StorageRouter(
+    {
+      ...a.driver,
+      identity: async () => ({
+        role: "PLAYER",
+        roomId: "improvements-cloud",
+        playerId: "member",
+      }),
+    },
+    memoryStorage(),
+  );
+  const member = new TeamStore(memberRouter);
+  await connect(member);
+  const amounts = { pp: 0, gp: 30, sp: 0, cp: 0 };
+  await member.transact(amounts, member.state.money, "云端玩家报酬");
+  await a.store.refresh();
+  expect(a.store.state.money.gp.value).toBe(30);
+  expect(a.store.state.ledger[0].reason).toBe("云端玩家报酬");
+  expect(JSON.stringify(a.data())).not.toContain("云端玩家报酬");
+  await member.save({ ...potion, pinned: true, order: 3 });
+  await member.remove(member.state.entries[0]);
+  await a.store.refresh();
+  expect(a.store.state.trash).toHaveLength(1);
+  const deleted = a.store.state.trash[0];
+  await a.store.restore(deleted);
+  await member.refresh();
+  expect(member.state.entries[0]).toMatchObject({ pinned: true, order: 3 });
+  await expect(member.restore(deleted)).rejects.toThrow();
+  await a.store.save(WELCOME_ACHIEVEMENT);
+  await a.store.remove(a.store.state.achievements[0]);
+  const deletedAchievement = a.store.state.trash[0];
+  await member.refresh();
+  expect(member.state.trash).toHaveLength(0);
+  await expect(member.restore(deletedAchievement)).rejects.toThrow();
+  // The server must reject forged member writes too, not just hide UI controls.
+  const before = await memberRouter.read();
+  await expect(
+    memberRouter.write(
+      {
+        [ACHIEVEMENT_PREFIX + deletedAchievement.id]: {
+          ...deletedAchievement,
+          deletedAt: undefined,
+        },
+      },
+      before,
+    ),
+  ).rejects.toThrow("权限");
+  await a.store.selectStorage(profile, libB);
+  expect(a.store.state.ledger).toHaveLength(0);
+  expect(a.store.state.trash).toHaveLength(0);
+  await a.store.selectStorage();
+  expect(a.store.state.ledger).toHaveLength(0);
+  await a.store.selectStorage(profile, lib);
+  expect(a.store.state.ledger).toHaveLength(1);
+  expect(a.store.state.trash).toHaveLength(1);
+  await a.store.restore(a.store.state.trash[0]);
+  expect(a.store.state.achievements).toHaveLength(1);
+});
+
+it("commits cloud balances and ledger atomically and keeps only 100 recent transactions", async () => {
+  const a = room("ledger-atomic");
+  await connect(a.store);
+  await a.router.saveProfile(profile);
+  const lib = await a.router.createLibrary(profile, "流水回归");
+  await a.store.selectStorage(profile, lib);
+  const prefix = PREFIX + "ledger/";
+  const seed = Object.fromEntries(
+    Array.from({ length: 100 }, (_, i) => [
+      prefix + `seed-${i}`,
+      { id: `seed-${i}`, at: i, reason: "历史", changes: { gp: 1 } },
+    ]),
+  );
+  await a.router.write(seed, await a.router.read());
+  await a.store.refresh();
+  const amounts = { pp: 0, gp: 10, sp: 0, cp: 0 };
+  const stale = a.store.state.money;
+  await a.store.transact(amounts, stale, "新报酬");
+  expect(a.store.state.ledger).toHaveLength(100);
+  expect(a.store.state.ledger[0].reason).toBe("新报酬");
+  expect(a.store.state.ledger.some((t) => t.id === "seed-0")).toBe(false);
+  await expect(a.store.transact(amounts, stale, "过期报酬")).rejects.toThrow(
+    "队友修改",
+  );
+  expect(a.store.state.ledger.some((t) => t.reason === "过期报酬")).toBe(false);
+  expect(a.store.state.money.gp.value).toBe(10);
 });

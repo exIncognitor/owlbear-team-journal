@@ -16,6 +16,9 @@ interface Base {
   title: string;
   rev: string;
   updatedAt: number;
+  pinned?: boolean;
+  order?: number;
+  deletedAt?: number;
 }
 export interface Item extends Base {
   kind: "item";
@@ -60,11 +63,55 @@ export type Draft =
   | (Omit<Intel, keyof Base> & { title: string })
   | (Omit<Artwork, keyof Base> & { title: string })
   | (Omit<Achievement, keyof Base> & { title: string });
+export type OrderedDraft = Draft & { pinned?: boolean; order?: number };
+export const LEDGER_PREFIX = PREFIX + "ledger/";
+export interface Transaction {
+  id: string;
+  at: number;
+  reason: string;
+  changes: Partial<Record<Coin, number>>;
+}
+export function validateTransaction(value: unknown): Transaction {
+  const d = object(value),
+    changes = object(d.changes);
+  const id = text(d.id, "流水编号", 80, true);
+  if (!/^[a-zA-Z0-9-]+$/.test(id)) throw Error("流水编号无效");
+  const clean: Transaction["changes"] = {};
+  for (const coin of COINS) {
+    if (changes[coin] == null) continue;
+    const amount = changes[coin];
+    if (
+      typeof amount !== "number" ||
+      !Number.isSafeInteger(amount) ||
+      Math.abs(amount) > 999999999
+    )
+      throw Error("收支数额无效");
+    clean[coin] = amount;
+  }
+  return {
+    id,
+    at: integer(d.at, "流水时间", Number.MAX_SAFE_INTEGER),
+    reason: text(d.reason, "收支原因", 200, true),
+    changes: clean,
+  };
+}
+export function compareEntries(a: Entry, b: Entry) {
+  return (
+    Number(!!b.pinned) - Number(!!a.pinned) ||
+    (a.order ?? 0) - (b.order ?? 0) ||
+    b.updatedAt - a.updatedAt ||
+    a.id.localeCompare(b.id)
+  );
+}
 export interface Money {
   value: number;
   rev: string;
 }
 export interface Snapshot {
+  localWarning?: string;
+  localScope?: string;
+  trash: Entry[];
+  ledger: Transaction[];
   privateArtStorage?: "browser" | "cloud";
   privateArtMessage?: string;
   storage?: import("./storage-router").StorageInfo;
@@ -82,6 +129,8 @@ export const DISPLAY_KEY = PREFIX + "display";
 export function emptySnapshot(): Snapshot {
   return {
     role: "PLAYER",
+    trash: [],
+    ledger: [],
     entries: [],
     achievements: [],
     money: Object.fromEntries(
@@ -142,6 +191,8 @@ export function safeImageUrl(value: unknown, demo = false): string {
 }
 export function validateEntry(value: unknown, demo = false): Entry {
   const d = object(value);
+  if (d.pinned != null && typeof d.pinned !== "boolean")
+    throw Error("置顶设置无效");
   if (typeof d.id !== "string" || !/^[a-zA-Z0-9-]{1,80}$/.test(d.id))
     throw Error("资料编号无效");
   const base = {
@@ -149,6 +200,13 @@ export function validateEntry(value: unknown, demo = false): Entry {
     title: text(d.title, "标题", 80, true),
     rev: text(d.rev, "版本", 80, true),
     updatedAt: integer(d.updatedAt, "更新时间", Number.MAX_SAFE_INTEGER),
+    ...(d.pinned == null ? {} : { pinned: d.pinned === true }),
+    ...(d.order == null ? {} : { order: integer(d.order, "排序", 999999) }),
+    ...(d.deletedAt == null
+      ? {}
+      : {
+          deletedAt: integer(d.deletedAt, "删除时间", Number.MAX_SAFE_INTEGER),
+        }),
   };
   if (d.kind === "item") {
     if (d.category !== "道具" && d.category !== "装备")
@@ -325,6 +383,23 @@ export async function readSnapshot(
       throw Error("展示资料格式不正确");
     state.shownId = typeof d.id === "string" ? d.id : null;
   }
+  state.trash = [...state.entries, ...state.achievements].filter(
+    (e) => e.deletedAt != null,
+  );
+  state.entries = state.entries
+    .filter((e) => e.deletedAt == null)
+    .sort(compareEntries);
+  state.achievements = state.achievements
+    .filter((e) => e.deletedAt == null)
+    .sort(compareEntries);
+  state.ledger = Object.entries(metadata)
+    .filter(([key, value]) => key.startsWith(LEDGER_PREFIX) && value != null)
+    .map(([key, value]) => {
+      const transaction = validateTransaction(value);
+      if (key !== LEDGER_PREFIX + transaction.id) throw Error("流水编号不匹配");
+      return transaction;
+    })
+    .sort((a, b) => b.at - a.at);
   state.ready = true;
   state.bytes = metadataBytes(metadata);
   return state;

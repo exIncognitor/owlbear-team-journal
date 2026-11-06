@@ -66,6 +66,12 @@ async function connect(store: TeamStore) {
   return stop;
 }
 beforeEach(() => {
+  const local = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => local.get(key) ?? null,
+    setItem: (key: string, value: string) => local.set(key, value),
+    removeItem: (key: string) => local.delete(key),
+  });
   vi.clearAllMocks();
   assets.upload.mockResolvedValue();
   assets.pick.mockResolvedValue([]);
@@ -359,6 +365,25 @@ const privateArt: Draft = {
   caption: "DM 专用说明",
   visibility: "gm",
 };
+
+it("does not show an old public recovery copy after the restored artwork becomes private", async () => {
+  const { gm, room } = privateRoom();
+  const stop = await connect(gm);
+  await gm.save({ ...privateArt, visibility: "players" });
+  await gm.remove(gm.state.entries[0]);
+  await gm.restore(gm.state.trash[0]);
+  const restored = gm.state.entries[0] as Artwork;
+  await gm.save({ ...restored, visibility: "gm" }, restored);
+  expect(gm.state.trash).toHaveLength(0);
+  await gm.remove(gm.state.entries[0]);
+  expect(gm.state.trash).toHaveLength(1);
+  expect(gm.state.trash[0]).toMatchObject({ visibility: "gm" });
+  await gm.restore(gm.state.trash[0]);
+  expect(gm.state.trash).toHaveLength(0);
+  expect(gm.state.entries[0]).toMatchObject({ visibility: "gm" });
+  expect(JSON.stringify(room.get())).not.toContain("secret.png");
+  stop();
+});
 
 it("keeps private artwork entirely out of shared metadata and rejects player/private presentation writes", async () => {
   const { room, gm, vault } = privateRoom();
